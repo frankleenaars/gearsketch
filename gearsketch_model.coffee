@@ -2,6 +2,10 @@
 # University of Twente - Department of Instructional Technology
 "use strict"
 
+# TODO:
+# - point class with util methods
+# - fix crashing bugs when dragging gear from chain (possibly indirectly)
+
 # imports
 Util = window.gearsketch.Util
 
@@ -23,6 +27,9 @@ class Gear
     @innerRadius = Util.MODULE * (0.5 * @numberOfTeeth - 1.25)
     @outerRadius = Util.MODULE * (0.5 * @numberOfTeeth + 1)
 
+  clone: ->
+    new Gear(Util.clone(@location), @rotation, @numberOfTeeth, @id)
+
 window.gearsketch.model.Gear = Gear
 
 
@@ -32,6 +39,41 @@ window.gearsketch.model.Gear = Gear
 class ArcSegment
   constructor: (@center, @radius, @start, @end, @direction) ->
 
+  getLength: ->
+    angle = if @direction is Util.Direction.CLOCKWISE
+      Util.mod(@end - @start, 2 * Math.PI)
+    else
+      Util.mod(@start - @end, 2 * Math.PI)
+    angle * @radius
+
+  findPoint: (distanceToGo) ->
+    angleToGo = distanceToGo / @radius
+    angle = @start + (if @direction is Util.Direction.CLOCKWISE then angleToGo else -angleToGo)
+    {x: @center.x + Math.cos(angle) * @radius, y: @center.y + Math.sin(angle) * @radius}
+
+  doesArcContainAngle: (angle) ->
+    if @direction is Util.Direction.CLOCKWISE
+      Util.mod(@end - @start, 2 * Math.PI) > Util.mod(angle - @start, 2 * Math.PI)
+    else
+      Util.mod(@start - @end, 2 * Math.PI) > Util.mod(@start - angle, 2 * Math.PI)
+
+  getDistanceToPoint: (point) ->
+    angle = Math.atan2(point.y - @center.y, point.x - @center.x)
+    if @doesArcContainAngle(angle)
+      Math.abs(Util.getDistance(point, @center) - @radius)
+    else
+      startPoint = {x: @center.x + Math.cos(@start) * @radius, y: @center.y + Math.sin(@start) * @radius}
+      endPoint = {x: @center.x + Math.cos(@end) * @radius, y: @center.y + Math.sin(@end) * @radius}
+      Math.min(Util.getDistance(point, startPoint), Util.getDistance(point, endPoint))
+
+  # TODO: find distance analytically
+  getDistanceToSegment: (segment) ->
+    # quick approximation: find distance to many points on segment and take the minimum
+    Math.min.apply(null, @getDistanceToPoint(segment.findPoint(d)) for d in [0...Math.ceil(segment.getLength())])
+
+  clone: ->
+    new ArcSegment(Util.clone(@center), @radius, @start, @end, @direction)
+
 window.gearsketch.model.ArcSegment = ArcSegment
 
 # ---------------------------
@@ -39,6 +81,33 @@ window.gearsketch.model.ArcSegment = ArcSegment
 # ---------------------------
 class LineSegment
   constructor: (@start, @end) ->
+
+  getLength: ->
+    Util.getDistance(@start, @end)
+
+  findPoint: (distanceToGo) ->
+    Util.getPointOnLineSegment(@start, @end, distanceToGo)
+
+  getDistanceToPoint: (point) ->
+    Util.getPointLineSegmentDistance(point, @start, @end)
+
+  getDistanceToSegment: (segment) ->
+    if segment instanceof LineSegment
+      if Util.findLineSegmentIntersection([@start, @end], [segment.start, segment.end])
+        0
+      else
+        Math.min(
+          Util.getPointLineSegmentDistance(@start, segment.start, segment.end)
+        , Util.getPointLineSegmentDistance(@end, segment.start, segment.end)
+        , Util.getPointLineSegmentDistance(segment.start, @start, @end)
+        , Util.getPointLineSegmentDistance(segment.end, @start, @end))
+    else # segment is ArcSegment
+      segment.getDistanceToSegment(this)
+
+  clone: ->
+    new LineSegment(Util.clone(@start), Util.clone(@end))
+
+
 
 window.gearsketch.model.LineSegment = LineSegment
 
@@ -54,18 +123,47 @@ class Chain
   ArcSegment = window.gearsketch.model.ArcSegment
   LineSegment = window.gearsketch.model.LineSegment
 
+  @WIDTH: 6
+
   nextChainId = 0
 
   points: []
   segments: []
 
-  constructor: (stroke, board, id) ->
+  constructor: (stroke, id) ->
     if id?
       @id = id
     else
       @id = nextChainId
       nextChainId++
     @points = ({x, y} for {x, y} in stroke)
+
+  getLength: ->
+    length = 0
+    for segment in @segments
+      length += segment.getLength()
+    length
+
+  findPointOnChain: (distance) ->
+    length = @getLength()
+    distanceToGo = Util.mod(distance, length)
+    for segment in @segments
+      segmentLength = segment.getLength()
+      if distanceToGo < segmentLength
+        return segment.findPoint(distanceToGo)
+      else
+        distanceToGo -= segmentLength
+    null
+
+  findPointsOnChain: (numberOfPoints) ->
+    delta = @getLength() / numberOfPoints
+    @findPointOnChain(p * delta) for p in [0...numberOfPoints]
+
+  getDistanceToPoint: (point) ->
+    Math.min.apply(null, (segment.getDistanceToPoint(point) for segment in @segments))
+
+  getDistanceToLineSegment: (lineSegment) ->
+    Math.min.apply(null, (segment.getDistanceToSegment(lineSegment) for segment in @segments))
 
 #  removeEmptyTriangles: (board) ->
 #    gears = board.getGearList()
@@ -114,6 +212,7 @@ class Chain
     a = path[0]
     d = 0
     while d < pathLength and !supportingGear?
+      #console.log("while1")
       d += stepSize
       b = Util.findPointOnPath(path, d)
       supportingGear = Util.findNearestIntersectingGear(gears, a, b)
@@ -127,6 +226,7 @@ class Chain
     a = firstSupportingGear.location
     d = startDistance
     while d < pathLength
+      #console.log("while2")
       d += stepSize
       b = Util.findPointOnPath(path, d)
       tangentSide = @findReverseChainTangentSide(supportingGear)
@@ -142,6 +242,7 @@ class Chain
     numberOfNoops = 0
     i = 0
     while numberOfNoops < (numberOfGears = gearsList.length)
+      #console.log("while3")
       j = (i + 1) % numberOfGears
       g1 = gearsList[i]
       g2 = gearsList[j]
@@ -153,7 +254,17 @@ class Chain
         i = (i + 1) % numberOfGears
     gearsList
 
-  findSupportingGears: (gears) ->
+  containsSuccessiveOverlappingGears: (gearsList) ->
+    numberOfGears = gearsList.length
+    for i in [0...numberOfGears]
+      j = (i + 1) % numberOfGears
+      g1 = gearsList[i]
+      g2 = gearsList[j]
+      if Util.getDistance(g1.location, g2.location) < (g1.outerRadius + g2.outerRadius)
+        return true
+    false
+
+  findSupportingGearIds: (gears) ->
     [firstSupportingGear, startDistance] = @findFirstSupportingGearOnPath(@points, gears)
     supportingGears = [firstSupportingGear]
     nextSupportingGears = @findSupportingGearsOnPath(gears, firstSupportingGear, @points, startDistance)
@@ -166,7 +277,7 @@ class Chain
       lastSupportingGear = supportingGears[supportingGears.length-1]
       nextSupportingGears = @findSupportingGearsOnPath(gears, lastSupportingGear, finalSegment, 0, false)
       supportingGears = supportingGears.concat(nextSupportingGears)
-    @removeRepeatedGears(supportingGears)
+    (gear.id for gear in @removeRepeatedGears(supportingGears))
 
   findIgnoredGearIds: (board) ->
     # find minimal distance of each level of gears in each group to the chain
@@ -200,68 +311,117 @@ class Chain
         ignoredGearIds[id] = true
     ignoredGearIds
 
-  updateChain: (board) ->
-    # TODO: deal with @ignoredGearIds
-    try
-      acknowledgedGears = board.getAcknowledgedGears(@ignoredGearIds)
+  # convert a list of segments to a polygon
+  # used for finding gear centers inside a tightened chain
+  toPolygon: (segments)->
+    polygon = []
+    for segment in segments
+      if segment instanceof LineSegment
+        polygon.push(segment.start)
+      else # ArcSegment
+        polygon.push(segment.findPoint(0))
+        polygon.push(segment.findPoint(0.5 * segment.getLength()))
+    polygon
 
-      # first: update gear sequence
-      gears = @supportingGears
-      i = 0
-      while i < (numberOfGears = gears.length)
-        j = (i + 1) % numberOfGears
-        k = (i + 2) % numberOfGears
-        g1 = gears[i]
-        g2 = gears[j]
-        g3 = gears[k]
+  updateChain: (board, gears = board.getGearsWithIds(@supportingGearIds)) ->
+    if gears.length < 2
+      return false
 
-        line1 = Util.findTangentLine(g1, g2, @innerGearIds, @direction)
-        line2 = Util.findTangentLine(g2, g3, @innerGearIds, @direction)
-        intersection = Util.findLineSegmentIntersection(line1, line2)
-        if intersection? # g2 cannot support chain
-          tangentSideG1 = @findReverseChainTangentSide(g1)
-          tangentPointG1 = Util.findGearTangentPoints(intersection, g1)[tangentSideG1]
-          tangentSideG3 = @findChainTangentSide(g3)
-          tangentPointG3 = Util.findGearTangentPoints(intersection, g3)[tangentSideG3]
-          path = [tangentPointG1, intersection, tangentPointG3]
-          replacementGears = @findSupportingGearsOnPath(acknowledgedGears, g1, path, 0, false)
-          gears.splice.apply(gears, [j, 2].concat(replacementGears))
-          #return @updateChain(board) # start over?
-        gear = Util.findNearestIntersectingGear(acknowledgedGears, line1[0], line1[1], Util.makeSet(g1.id, g2.id))
-        if gear?
-          gears.splice(j, 0, gear)
-        i++
+    if @containsSuccessiveOverlappingGears(gears)
+      return false
 
-      # second: update points & segments
-      updatedPoints = []
-      for i in [0...numberOfGears]
-        j = (i + 1) % numberOfGears
-        g1 = gears[i]
-        g2 = gears[j]
-        tangentLine = Util.findTangentLine(g1, g2, @innerGearIds, @direction)
-        updatedPoints.push(tangentLine[0], tangentLine[1])
-      updatedSegments = []
-      for i in [0...numberOfGears]
-        p0 = updatedPoints[2 * i]
-        p1 = updatedPoints[2 * i + 1]
-        p2 = updatedPoints[2 * ((i + 1) % numberOfGears)]
-        gear = gears[(i + 1) % numberOfGears]
-        lineSegment = new LineSegment(p0, p1)
-        arcStart = Math.atan2(p1.y - gear.location.y, p1.x - gear.location.x)
-        arcEnd = Math.atan2(p2.y - gear.location.y, p2.x - gear.location.x)
-        direction = if (@direction is Util.Direction.CLOCKWISE) is (gear.id in @innerGearIds)
-          Util.Direction.CLOCKWISE
-        else
-          Util.Direction.COUNTER_CLOCKWISE
-        arcSegment = new ArcSegment(gear.location, gear.pitchRadius, arcStart, arcEnd, direction)
-        updatedSegments.push(lineSegment, arcSegment)
-      @points = updatedPoints
-      @segments = updatedSegments
-      true
-    catch error
-      console.log("an error occured while updating chain")
-      console.log(error)
-      false
+    acknowledgedGears = board.getAcknowledgedGears(@ignoredGearIds)
+
+    # first: update gear sequence
+    # TODO: update ignored gears, should include overlapping gears in different groups
+    i = 0
+    while i < (numberOfGears = gears.length)
+      #console.log("while4")
+      j = (i + 1) % numberOfGears
+      k = (i + 2) % numberOfGears
+      g1 = gears[i]
+      g2 = gears[j]
+      g3 = gears[k]
+
+      line1 = Util.findTangentLine(g1, g2, @innerGearIds, @direction)
+      line2 = Util.findTangentLine(g2, g3, @innerGearIds, @direction)
+      intersection = Util.findLineSegmentIntersection(line1, line2)
+      if intersection? # g2 cannot support chain
+        tangentSideG1 = @findReverseChainTangentSide(g1)
+        tangentPointG1 = Util.findGearTangentPoints(intersection, g1)[tangentSideG1]
+        tangentSideG3 = @findChainTangentSide(g3)
+        tangentPointG3 = Util.findGearTangentPoints(intersection, g3)[tangentSideG3]
+        path = [tangentPointG1, intersection, tangentPointG3]
+        replacementGears = @findSupportingGearsOnPath(acknowledgedGears, g1, path, 0, false)
+        if g2 in replacementGears # rare bug due to floating point errors
+          console.log("it happened!")
+          return false
+        gears.splice.apply(gears, [j, 1].concat(replacementGears))
+        @removeRepeatedGears(gears)
+        return @updateChain(board, gears) # start over
+      gear = Util.findNearestIntersectingGear(acknowledgedGears, line1[0], line1[1], Util.makeSet(g1.id, g2.id))
+      if gear?
+        gears.splice(j, 0, gear)
+        if @containsSuccessiveOverlappingGears(gears)
+          return false
+      i++
+
+    # second: update points & segments
+    updatedPoints = []
+    for i in [0...numberOfGears]
+      j = (i + 1) % numberOfGears
+      g1 = gears[i]
+      g2 = gears[j]
+      tangentLine = Util.findTangentLine(g1, g2, @innerGearIds, @direction)
+      updatedPoints.push(tangentLine[0], tangentLine[1])
+    updatedSegments = []
+    for i in [0...numberOfGears]
+      p0 = updatedPoints[2 * i]
+      p1 = updatedPoints[2 * i + 1]
+      p2 = updatedPoints[2 * ((i + 1) % numberOfGears)]
+      gear = gears[(i + 1) % numberOfGears]
+      lineSegment = new LineSegment(p0, p1)
+      arcStart = Math.atan2(p1.y - gear.location.y, p1.x - gear.location.x)
+      arcEnd = Math.atan2(p2.y - gear.location.y, p2.x - gear.location.x)
+      direction = if (@direction is Util.Direction.CLOCKWISE) is (gear.id in @innerGearIds)
+        Util.Direction.CLOCKWISE
+      else
+        Util.Direction.COUNTER_CLOCKWISE
+      arcSegment = new ArcSegment(gear.location, gear.pitchRadius, arcStart, arcEnd, direction)
+      updatedSegments.push(lineSegment, arcSegment)
+
+    # third: check if chain doesn't touch itself
+    numberOfSegments = updatedSegments.length
+    for i in [0...numberOfSegments - 2]
+      for j in [(i + 2)...numberOfSegments]
+        if i isnt 0 or j isnt numberOfSegments - 1 # don't compare first and last segments
+          s1 = updatedSegments[i]
+          s2 = updatedSegments[j]
+          if s1.getDistanceToSegment(s2) < (Chain.WIDTH / 2 + Util.EPSILON)
+            # make sure segments are not connected by a very small ArcSegment
+            if (i + 2) is j
+              middleSegment = updatedSegments[i + 1]
+              if (middleSegment instanceof ArcSegment) and (middleSegment.getLength() < Chain.WIDTH)
+                continue
+            if ((j + 2) % numberOfSegments) is i # note: not else if, both can be true in chain with 4 segments
+              middleSegment = updatedSegments[(j + 1) % numberOfSegments]
+              if (middleSegment instanceof ArcSegment) and (middleSegment.getLength() < Chain.WIDTH)
+                continue
+            console.log("chain crosses itself")
+            return false
+
+    # fourth: check if innergears hasn't changed
+    chainPolygon = @toPolygon(updatedSegments)
+    updatedInnerGearIds =
+      (gear.id for id, gear of acknowledgedGears when Util.isPointInsidePolygon(gear.location, chainPolygon))
+    if !Util.areArraysEqual(@innerGearIds, updatedInnerGearIds)
+      console.log("innerGears changed")
+      return false
+
+    @points = updatedPoints
+    @segments = updatedSegments
+    @supportingGearIds = (gear.id for gear in gears)
+    true
 
   tightenChain: (board) ->
     #@removeEmptyTriangles(board)
@@ -272,8 +432,17 @@ class Chain
     if @innerGearIds.length < 2
       return false
     @direction = Util.findDirection(@points)
-    @supportingGears = @findSupportingGears(acknowledgedGears)
+    @supportingGearIds = @findSupportingGearIds(acknowledgedGears)
     @updateChain(board)
+
+  clone: ->
+    copy = new Chain(@points, @id)
+    copy.segments = Util.clone(@segments)
+    copy.ignoredGearIds = Util.clone(@ignoredGearIds)
+    copy.innerGearIds = Util.clone(@innerGearIds)
+    copy.direction = @direction
+    copy.supportingGearIds = Util.clone(@supportingGearIds)
+    copy
 
 window.gearsketch.model.Chain = Chain
 
@@ -301,13 +470,21 @@ class Board
   momenta: {}
   chains: {}
 
+  # should probably add board.clone() method
   saveBoard: ->
-    gears: JSON.parse(JSON.stringify(@gears))
-    connections: JSON.parse(JSON.stringify(@connections))
-    groups: JSON.parse(JSON.stringify(@groups))
-    levels: JSON.parse(JSON.stringify(@levels))
-    momenta: JSON.parse(JSON.stringify(@momenta))
-    chains: JSON.parse(JSON.stringify(@chains))
+#    gears: JSON.parse(JSON.stringify(@gears))
+#    connections: JSON.parse(JSON.stringify(@connections))
+#    groups: JSON.parse(JSON.stringify(@groups))
+#    levels: JSON.parse(JSON.stringify(@levels))
+#    momenta: JSON.parse(JSON.stringify(@momenta))
+    #chains: JSON.parse(JSON.stringify(@chains))
+    gears: Util.clone(@gears)
+    connections: Util.clone(@connections)
+    groups: Util.clone(@groups)
+    levels: Util.clone(@levels)
+    momenta: Util.clone(@momenta)
+    chains: Util.clone(@chains)
+
 
   restoreBoard: (board) ->
     for own id, gear of @gears
@@ -622,8 +799,15 @@ class Board
 
     # check if board is valid
     if @isBoardValid()
-      #chain.updateChain(this) for own id, chain of @chains #temp
-      true
+      # TODO: refactor
+      chainsValid = true
+      for own id, chain of @chains
+        chainsValid = chainsValid and chain.updateChain(this)
+      if chainsValid
+        true
+      else
+        @restoreBoard(oldBoard)
+        false
     else
       @restoreBoard(oldBoard)
       false
@@ -672,6 +856,12 @@ class Board
         if !gear or candidate.numberOfTeeth < gear.numberOfTeeth
           gear = candidate
     gear
+
+  getGearWithId: (id) ->
+    @gears[id]
+
+  getGearsWithIds: (ids) ->
+    @gears[id] for id in ids
 
   rotateAllGears: (delta) ->
     for own id, gear of @gears

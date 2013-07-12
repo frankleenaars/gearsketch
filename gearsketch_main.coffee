@@ -67,6 +67,10 @@ class GearSketch
     @addCanvasListeners()
     @lastUpdateTime = new Date().getTime()
     @updateAndDraw()
+    Util.tempRegisterDrawMethod(this, @draw)
+#    @board.addGear(new Gear({x: 200, y: 300}, 0, 30))
+#    @board.addGear(new Gear({x: 400, y: 300}, 0, 20))
+#    @board.addGear(new Gear({x: 600, y: 300}, 0, 30))
 
   buttonLoaded: ->
     @loadedButtons++
@@ -288,18 +292,21 @@ class GearSketch
     image.src = gearCanvas.toDataURL("image/png")
 
   removeStrokedChains: (stroke) ->
-    # TODO
+    lineSegment = new LineSegment(stroke[0], stroke[stroke.length - 1])
+    for own id, chain of @board.getChains()
+      # TODO: remove + 2 when analytical segment distance methods are implemented
+      if chain.getDistanceToLineSegment(lineSegment) < (Util.EPSILON + 2)
+        @board.removeChain(chain)
 
   processChainStroke: ->
     normalizedStroke = @normalizeStroke(@stroke)
     @stroke = []
     gearsInChain = Util.findGearsInsidePolygon(normalizedStroke, @board.getGears())
     if normalizedStroke.length >= 3 and gearsInChain.length > 0
-      chain = new Chain(normalizedStroke, @board)
+      chain = new Chain(normalizedStroke)
       @board.addChain(chain)
-    else
-      @removeStrokedChains()
-
+    else if normalizedStroke.length >= 2
+      @removeStrokedChains(normalizedStroke)
 
   calculateMomentumFromCoords: (gear, x, y) ->
     angle = Math.atan2(y - gear.location.y, x - gear.location.x)
@@ -344,8 +351,8 @@ class GearSketch
       return
 
     pitchRadius = gear.pitchRadius
-    innerRadius = pitchRadius - 1.25 * MODULE
-    outerRadius = pitchRadius + MODULE
+    innerRadius = gear.innerRadius
+    outerRadius = gear.outerRadius
     angleStep = 2 * Math.PI / numberOfTeeth
 
     # draw teeth
@@ -452,9 +459,9 @@ class GearSketch
 
   drawChain: (ctx, chain) ->
     ctx.save()
-    ctx.lineWidth = 6
+    ctx.lineWidth = Chain.WIDTH
     ctx.lineCap = "round"
-    ctx.strokeStyle = "blue"
+    ctx.strokeStyle = "rgba(0, 0, 255, 0.8)"
     ctx.moveTo(chain.segments[0].start.x, chain.segments[0].start.y)
     for segment in chain.segments
       if segment instanceof ArcSegment
@@ -467,6 +474,11 @@ class GearSketch
         ctx.moveTo(segment.start.x, segment.start.y)
         ctx.lineTo(segment.end.x, segment.end.y)
         ctx.stroke()
+    ctx.fillStyle = "white"
+    for point in chain.findPointsOnChain(25)
+      ctx.beginPath()
+      ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI, true)
+      ctx.fill()
     ctx.restore()
 
   drawDemoPointer: (ctx, location) ->
@@ -520,7 +532,7 @@ class GearSketch
         if @selectedButton is "gearButton"
           ctx.strokeStyle = "black"
           ctx.lineWidth = 2
-        else
+        else # chain stroke
           ctx.strokeStyle = "blue"
           ctx.lineWidth = 4
         ctx.beginPath()

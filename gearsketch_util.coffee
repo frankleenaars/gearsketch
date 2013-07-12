@@ -14,7 +14,7 @@ class Util
   @MIN_GEAR_TEETH: 8
   @MIN_STACKED_GEARS_TEETH_DIFFERENCE: 4
   @SNAPPING_DISTANCE: 2 * @MODULE
-  @EPSILON = 0.0001
+  @EPSILON: 0.000001
 
   # -- enums --
   @Direction:
@@ -25,6 +25,29 @@ class Util
     LEFT: "left"
     RIGHT: "right"
     ON_LINE: "on line"
+
+  # http://stackoverflow.com/questions/728360/most-elegant-way-to-clone-a-javascript-object
+  @clone: (obj) ->
+    if !obj? or (typeof obj isnt "object")
+      return obj
+
+    knownClasses = ["Gear", "ArcSegment", "LineSegment", "Chain"]
+    if obj.constructor.name in knownClasses
+      return obj.clone()
+
+    if obj instanceof Array
+      copy = []
+      for i in [0...obj.length]
+        copy[i] = @clone(obj[i])
+      return copy
+
+    if obj instanceof Object
+      copy = {}
+      for own key, val of obj
+        copy[key] = @clone(obj[key])
+      return copy
+
+    throw new Error("Unable to clone object. Its type is not supported.")
 
   @addPoints: () ->
     point = {x: 0, y: 0}
@@ -58,11 +81,24 @@ class Util
       set[element] = true
     set
 
+  # compares two arrays of numbers
+  @areArraysEqual: (a1, a2, orderMatters = true) ->
+    if !a1? or !a2?
+      false
+    else if a1.length isnt a2.length
+      false
+    else if orderMatters
+      a1.every((e, i) -> e is a2[i])
+    else # order doesn't matter
+      sa1 = (e for e in a1).sort((e1, e2) -> e1 - e2)
+      sa2 = (e for e in a2).sort((e1, e2) -> e1 - e2)
+      @areArraysEqual(sa1, sa2)
+
   @makeSet: (elements...) ->
     set = {}
     @addAll(set, elements)
 
-  @getPointOnSegment: (a, b, distance) ->
+  @getPointOnLineSegment: (a, b, distance) ->
     fraction = distance / @getDistance(a, b)
     {x: a.x + fraction * (b.x - a.x), y: a.y + fraction * (b.y - a.y)}
 
@@ -77,7 +113,7 @@ class Util
       p2 = path[j]
       segmentLength = @getDistance(p1, p2)
       if distanceToGo <= segmentLength
-        return @getPointOnSegment(p1, p2, distanceToGo)
+        return @getPointOnLineSegment(p1, p2, distanceToGo)
       else
         i = j
         distanceToGo -= segmentLength
@@ -138,7 +174,7 @@ class Util
 
   @doesGearIntersectSegment: (gear, a, b) ->
     #@getPointLineSegmentDistance(gear.location, a, b) < gear.outerRadius + @EPSILON
-    @getPointLineSegmentDistance(gear.location, a, b) < gear.pitchRadius + @EPSILON
+    @getPointLineSegmentDistance(gear.location, a, b) < gear.pitchRadius + Util.EPSILON
 
   @doesGearIntersectTriangle: (gear, triangle) ->
     @isPointInsidePolygon(gear.location, triangle) or
@@ -188,7 +224,7 @@ class Util
     crossRS = @cross(r, s)
     t = @cross(@subtractPoints(q, p), s) / crossRS
     u = @cross(@subtractPoints(q, p), r) / crossRS
-    if Math.abs(crossRS) > @EPSILON and 0 <= t and t <= 1 and 0 <= u and u <= 1
+    if Math.abs(crossRS) > Util.EPSILON and 0 <= t and t <= 1 and 0 <= u and u <= 1
       @addPoints(p, {x: t * r.x, y: t * r.y})
     else
       null
@@ -206,6 +242,7 @@ class Util
     else
       @Direction.COUNTER_CLOCKWISE
 
+  # TODO: REMOVE?
   # get side of point p relative to line ab
   # http://stackoverflow.com/questions/1560492/how-to-tell-wether-a-point-is-right-or-left-of-a-line
   @getSide: (p, a, b) ->
@@ -220,9 +257,11 @@ class Util
   # get the two tangent points on a circle with center c and radius r from a given point p
   # tangent points are only valid if |pc| > r
   @findTangentPoints: (p, c, r) ->
+    tangentPoints = {}
     d = @getDistance(p, c)
-    if Math.abs(d - r) < @EPSILON # p on circle
-      [p, p]
+    if Math.abs(d - r) < Util.EPSILON # p on circle
+      tangentPoints[@Side.RIGHT] = {x: p.x, y: p.y}
+      tangentPoints[@Side.LEFT] = {x: p.x, y: p.y}
     else
       l = Math.sqrt(d * d - r * r)
       alpha = Math.atan2(c.y - p.y, c.x - p.x)
@@ -231,10 +270,9 @@ class Util
       p1y = p.y + Math.sin(alpha + beta) * l
       p2x = p.x + Math.cos(alpha - beta) * l
       p2y = p.y + Math.sin(alpha - beta) * l
-      tangentPoints = {}
       tangentPoints[@Side.RIGHT] = {x: p1x, y: p1y}
       tangentPoints[@Side.LEFT] = {x: p2x, y: p2y}
-      tangentPoints
+    tangentPoints
 
   @findGearTangentPoints: (p, gear) ->
     #@findTangentPoints(p, gear.location, gear.outerRadius)
@@ -248,10 +286,20 @@ class Util
     r1 = radii[largest]
     r2 = radii[1 - largest]
     r3 = r1 - r2
-    tangentPoints = @findTangentPoints(o2, o1, r3)
-    angle = Math.atan2(o2.y - o1.y, o2.x - o1.x)
-    offset1 = {x: Math.cos(angle + 0.5 * Math.PI) * r2, y: Math.sin(angle + 0.5 * Math.PI) * r2}
-    offset2 = {x: Math.cos(angle - 0.5 * Math.PI) * r2, y: Math.sin(angle - 0.5 * Math.PI) * r2}
+    if r3 is 0
+      tangentPoints = {}
+      tangentPoints[@Side.LEFT] = o1
+      tangentPoints[@Side.RIGHT] = o1
+      angle = Math.atan2(o2.y - o1.y, o2.x - o1.x)
+      offset1 = {x: Math.cos(angle + 0.5 * Math.PI) * r1, y: Math.sin(angle + 0.5 * Math.PI) * r1}
+      offset2 = {x: Math.cos(angle - 0.5 * Math.PI) * r1, y: Math.sin(angle - 0.5 * Math.PI) * r1}
+    else
+      tangentPoints = @findTangentPoints(o2, o1, r3)
+      ratio = r2 / r3
+      tpl = tangentPoints[@Side.LEFT]
+      tpr = tangentPoints[@Side.RIGHT]
+      offset1 = {x: ratio * (tpl.x - o1.x), y: ratio * (tpl.y - o1.y)}
+      offset2 = {x: ratio * (tpr.x - o1.x), y: ratio * (tpr.y - o1.y)}
     tangentLine1 = [@addPoints(tangentPoints[@Side.LEFT], offset1), @addPoints(o2, offset1)]
     tangentLine2 = [@addPoints(tangentPoints[@Side.RIGHT], offset2), @addPoints(o2, offset2)]
     tangentLines = {}
@@ -308,7 +356,31 @@ class Util
       @findInternalTangentsOfGears(gear1, gear2)[side]
 
   # TEMP
-  @tempDrawLine: (a, b) ->
+  @tempRegisterDrawMethod: (object, drawFunction) ->
+    @tempRedraw = ->
+      drawFunction.call(object)
+
+  @tempDrawPath: (path, isPathClosed = false, shouldRedraw = true) ->
+    if shouldRedraw
+      @tempRedraw()
+    canvas = document.getElementById("gearsketch_canvas")
+    ctx = canvas.getContext("2d")
+    ctx.save()
+    ctx.lineWidth = 5
+    ctx.strokeStyle = "red"
+    ctx.beginPath()
+    numberOfPoints = path.length
+    lastPointIndex = path.length - (if isPathClosed then 0 else 1)
+    for i in [0...lastPointIndex]
+      j = (i + 1) % numberOfPoints
+      ctx.moveTo(path[i].x, path[i].y)
+      ctx.lineTo(path[j].x, path[j].y)
+    ctx.stroke()
+    ctx.restore()
+
+  @tempDrawLine: (a, b, shouldRedraw = true) ->
+    if shouldRedraw
+      @tempRedraw()
     canvas = document.getElementById("gearsketch_canvas")
     ctx = canvas.getContext("2d")
     ctx.save()
@@ -320,15 +392,29 @@ class Util
     ctx.stroke()
     ctx.restore()
 
-  @tempDrawCircle: (p) ->
+  @tempDrawCircle: (p, radius = 30, shouldRedraw = true) ->
+    if shouldRedraw
+      @tempRedraw()
     canvas = document.getElementById("gearsketch_canvas")
     ctx = canvas.getContext("2d")
     ctx.save()
-    ctx.lineWidth = 5
+    ctx.lineWidth = 2
     ctx.strokeStyle = "red"
     ctx.beginPath()
-    ctx.arc(p.x, p.y, 30, 0, 2 * Math.PI, false)
+    ctx.arc(p.x, p.y, radius, 0, 2 * Math.PI, false)
     ctx.stroke()
+    ctx.restore()
+
+  @tempDrawPoint: (p, shouldRedraw = true) ->
+    if shouldRedraw
+      @tempRedraw()
+    canvas = document.getElementById("gearsketch_canvas")
+    ctx = canvas.getContext("2d")
+    ctx.save()
+    ctx.fillStyle = "red"
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI, false)
+    ctx.fill()
     ctx.restore()
   # END TEMP
 
