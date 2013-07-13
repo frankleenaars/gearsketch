@@ -3,6 +3,7 @@
 "use strict"
 
 # imports
+Point = window.gearsketch.Point
 Util = window.gearsketch.Util
 Gear = window.gearsketch.model.Gear
 ArcSegment = window.gearsketch.model.ArcSegment
@@ -48,12 +49,12 @@ class GearSketch
 
   isPenDown: false
   stroke: []
-  offset: {x: 0, y: 0}
+  offset: new Point()
 
   board: new Board()
 
   # usage demo
-  pointerLocation: {x: 0, y: 0}
+  pointerLocation: new Point()
   currentDemoMovement: 0
   movementCompletion: 0
   restTimer: 0
@@ -84,7 +85,7 @@ class GearSketch
       button.name = name
       button.onload = => @buttonLoaded()
       button.src = file
-      button.location = {x, y}
+      button.location = new Point(x, y)
       button.padding = 3
       @buttons[name] = button
       x += 80
@@ -123,7 +124,8 @@ class GearSketch
     unless @isDemoPlaying
       @handlePenUp()
 
-  handlePenDown: (x, y) ->
+  handlePenDown: (x, y) -> # TODO: add point to stroke here?
+    point = new Point(x, y)
     if @isPenDown
       # pen released outside of canvas
       @handlePenUp()
@@ -135,26 +137,25 @@ class GearSketch
         else
           @selectedButton = button.name
       else if @selectedButton is "gearButton"
-        @selectedGear = @board.getGearAt({x, y})
+        @selectedGear = @board.getGearAt(point)
         if @selectedGear
-          @offset =
-            x: x - @selectedGear.location.x
-            y: y - @selectedGear.location.y
+          @offset = point.minus(@selectedGear.location)
         @isPenDown = true
       else if @selectedButton is "chainButton"
         @isPenDown = true
       else if @selectedButton is "momentumButton"
-        @selectedGear = @board.getGearAt({x, y})
+        @selectedGear = @board.getGearAt(point)
         if @selectedGear
           @board.removeMomentum(@selectedGear)
           @selectedGearMomentum = @calculateMomentumFromCoords(@selectedGear, x, y)
         @isPenDown = true
 
   handlePenMove: (x, y) ->
+    point = new Point(x, y)
     if @isPenDown
       if @selectedButton is "gearButton"
         if @selectedGear
-          goalLocation = {x: x- @offset.x, y: y - @offset.y}
+          goalLocation = point.minus(@offset)
           canPlaceGear = @board.placeGear(@selectedGear, goalLocation)
           if canPlaceGear
             @goalLocationGear = null
@@ -162,9 +163,9 @@ class GearSketch
             @goalLocationGear =
               new Gear(goalLocation, @selectedGear.rotation, @selectedGear.numberOfTeeth, @selectedGear.id)
         else
-          @stroke.push({x, y})
+          @stroke.push(point)
       else if @selectedButton is "chainButton"
-        @stroke.push({x, y})
+        @stroke.push(point)
       else if @selectedButton is "momentumButton"
         if @selectedGear
           @selectedGearMomentum = @calculateMomentumFromCoords(@selectedGear, x, y)
@@ -178,7 +179,8 @@ class GearSketch
         @processChainStroke()
       else if @selectedButton is "momentumButton"
         if @selectedGear
-          if Math.abs(@selectedGearMomentum) > 0.2
+          MIN_MOMENTUM = 0.2
+          if Math.abs(@selectedGearMomentum) > MIN_MOMENTUM
             @board.setMomentum(@selectedGear, @selectedGearMomentum)
           else
             @board.setMomentum(@selectedGear, 0)
@@ -201,14 +203,12 @@ class GearSketch
 
   normalizeStroke: (stroke) ->
     MIN_POINT_DISTANCE = 10
-
     normalizedStroke = []
     if stroke.length > 0
       [p1, strokeTail...] = stroke
       normalizedStroke.push(p1)
       for p2 in strokeTail
-        distance = Util.getDistance(p1, p2)
-        if distance > MIN_POINT_DISTANCE
+        if p1.distance(p2) > MIN_POINT_DISTANCE
           normalizedStroke.push(p2)
           p1 = p2
     normalizedStroke
@@ -221,13 +221,13 @@ class GearSketch
       maxY = Number.MIN_VALUE
       sumX = 0
       sumY = 0
-      for {x, y} in stroke
-        sumX += x
-        sumY += y
-        minX = Math.min(minX, x)
-        maxX = Math.max(maxX, x)
-        minY = Math.min(minY, y)
-        maxY = Math.max(maxY, y)
+      for p in stroke
+        sumX += p.x
+        sumY += p.y
+        minX = Math.min(minX, p.x)
+        maxX = Math.max(maxX, p.x)
+        minY = Math.min(minY, p.y)
+        maxY = Math.max(maxY, p.y)
         width = maxX - minX
         height = maxY - minY
         t = Math.floor(0.5 * (width + height) / MODULE)
@@ -247,25 +247,18 @@ class GearSketch
       if idealTrueAreaRatio > 0.80 and idealTrueAreaRatio < 1.20 and t > MIN_GEAR_TEETH
         x = sumX / stroke.length
         y = sumY / stroke.length
-        return new Gear({x, y}, 0, t)
+        return new Gear(new Point(x, y), 0, t)
     null
-
-  getStrokeGearDistance: (gear, stroke) ->
-    minDistance = Number.MAX_VALUE
-    for p in stroke
-      distance = Util.getDistance(p, gear.location)
-      minDistance = Math.min(distance, minDistance)
-    Math.max(0, minDistance - gear.innerRadius)
 
   removeStrokedGears: (stroke) ->
     for own id, gear of @board.getGears()
-      if @getStrokeGearDistance(gear, stroke) is 0
+      if Util.getPointPathDistance(gear.location, stroke, false) < gear.innerRadius
         @board.removeGear(gear)
 
   processGearStroke: ->
     normalizedStroke = @normalizeStroke(@stroke)
     gear = @createGearFromStroke(normalizedStroke)
-    if gear
+    if gear?
       isGearAdded = @board.addGear(gear)
       if isGearAdded and !(gear.numberOfTeeth of @gearImages)
         @addGearImage(gear)
@@ -283,7 +276,7 @@ class GearSketch
     gearCanvas.height = size
     gearCanvas.width = size
     ctx = gearCanvas.getContext("2d")
-    gearCopy = new Gear({x: 0.5 * size, y: 0.5 * size}, 0, gear.numberOfTeeth, gear.id)
+    gearCopy = new Gear(new Point(0.5 * size, 0.5 * size), 0, gear.numberOfTeeth, gear.id)
     @drawGear(ctx, gearCopy)
 
     # convert canvas to png
@@ -340,7 +333,7 @@ class GearSketch
     numberOfTeeth = gear.numberOfTeeth
 
     gearImage = @gearImages[gear.numberOfTeeth]
-    if color is "black" and gearImage
+    if color is "black" and gearImage?
       # use predrawn image instead of drawing it again
       gearImage = @gearImages[gear.numberOfTeeth]
       ctx.save()
@@ -350,24 +343,16 @@ class GearSketch
       ctx.restore()
       return
 
-    pitchRadius = gear.pitchRadius
-    innerRadius = gear.innerRadius
-    outerRadius = gear.outerRadius
-    angleStep = 2 * Math.PI / numberOfTeeth
-
     # draw teeth
+    angleStep = 2 * Math.PI / numberOfTeeth
     innerPoints = []
     outerPoints = []
     for i in [0...numberOfTeeth]
       for r in [0...4]
         if r is 0 or r is 3
-          px = Math.cos((i + 0.25 * r) * angleStep) * innerRadius
-          py = Math.sin((i + 0.25 * r) * angleStep) * innerRadius
-          innerPoints.push({x: px, y: py})
+          innerPoints.push(Point.polar((i + 0.25 * r) * angleStep, gear.innerRadius))
         else
-          px = Math.cos((i + 0.25 * r) * angleStep) * outerRadius
-          py = Math.sin((i + 0.25 * r) * angleStep) * outerRadius
-          outerPoints.push({x: px, y: py})
+          outerPoints.push(Point.polar((i + 0.25 * r) * angleStep, gear.outerRadius))
 
     ctx.save()
     ctx.fillStyle = "rgba(255, 255, 255, 0.8)"
@@ -376,7 +361,7 @@ class GearSketch
     ctx.translate(x, y)
     ctx.rotate(rotation)
     ctx.beginPath()
-    ctx.moveTo(innerRadius, 0)
+    ctx.moveTo(gear.innerRadius, 0)
     for i in [0...numberOfTeeth * 2]
       if i % 2 is 0
         ctx.lineTo(innerPoints[i].x, innerPoints[i].y)
@@ -398,7 +383,7 @@ class GearSketch
     # draw rotation indicator line
     ctx.beginPath()
     ctx.moveTo(AXIS_RADIUS, 0)
-    ctx.lineTo(innerRadius, 0)
+    ctx.lineTo(gear.innerRadius, 0)
     ctx.closePath()
     ctx.stroke()
     ctx.restore()
@@ -406,7 +391,6 @@ class GearSketch
   drawButton: (ctx, button) ->
     {x, y} = button.location
     padding = button.padding
-
     ctx.save()
     ctx.translate(x, y)
     ctx.beginPath()
@@ -424,7 +408,7 @@ class GearSketch
 
   drawMomentum: (ctx, gear, momentum, color = "red") ->
     pitchRadius = gear.pitchRadius
-    top = {x: gear.location.x, y: gear.location.y - pitchRadius}
+    top = new Point(gear.location.x, gear.location.y - pitchRadius)
     ctx.save()
     ctx.lineWidth = 5
     ctx.lineCap = "round"
@@ -433,7 +417,6 @@ class GearSketch
 
     # draw arc
     ctx.beginPath()
-    #ctx.moveTo(top.x, top.y)
     ctx.arc(0, pitchRadius, pitchRadius, -0.5 * Math.PI, momentum - 0.5 * Math.PI, momentum < 0)
     ctx.stroke()
 
@@ -442,18 +425,17 @@ class GearSketch
     angle = 0.2 * Math.PI
     headX = -Math.cos(momentum + 0.5 * Math.PI) * pitchRadius
     headY = pitchRadius - Math.sin(momentum + 0.5 * Math.PI) * pitchRadius
+    head = new Point(headX, headY)
     sign = momentum / Math.abs(momentum)
-    p1x = headX - sign * length * Math.cos(momentum + angle)
-    p1y = headY - sign * length * Math.sin(momentum + angle)
+    p1 = head.minus(Point.polar(momentum + angle, sign * length))
     ctx.beginPath()
     ctx.moveTo(headX, headY)
-    ctx.lineTo(p1x, p1y)
+    ctx.lineTo(p1.x, p1.y)
     ctx.stroke()
-    p2x = headX - sign * length * Math.cos(momentum - angle)
-    p2y = headY - sign * length * Math.sin(momentum - angle)
+    p2 = head.minus(Point.polar(momentum - angle, sign * length))
     ctx.beginPath()
     ctx.moveTo(headX, headY)
-    ctx.lineTo(p2x, p2y)
+    ctx.lineTo(p2.x, p2.y)
     ctx.stroke()
     ctx.restore()
 
@@ -573,76 +555,76 @@ class GearSketch
       duration: 2000
     ,
       from: @getButtonCenter("gearButton")
-      to: {x: 150, y: 200}
+      to: new Point(150, 200)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: {x: 150, y: 200 }
+      from: new Point(150, 200)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.CIRCLE
       radius: 100
       duration: 1500
     ,
-      from: {x: 150, y: 200}
-      to: {x: 350, y: 300}
+      from: new Point(150, 200)
+      to: new Point(350, 300)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: {x: 350, y: 300}
+      from: new Point(350, 300)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.CIRCLE
       radius: 40
       duration: 1000
     ,
-      from: {x: 350, y: 300}
-      to: {x: 350, y: 340}
+      from: new Point(350, 300)
+      to: new Point(350, 340)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 500
     ,
-      from: {x: 350, y: 340}
-      to: {x: 150, y: 300}
+      from: new Point(350, 340)
+      to: new Point(150, 300)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: {x: 150, y: 300}
-      to: {x: 400, y: 180}
+      from: new Point(150, 300)
+      to: new Point(400, 180)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: {x: 400, y: 180}
+      from: new Point(400, 180)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.CIRCLE
       radius: 80
       duration: 1000
     ,
-      from: {x: 400, y: 180}
-      to: {x: 400, y: 260}
+      from: new Point(400, 180)
+      to: new Point(400, 260)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 500
     ,
-      from: {x: 400, y: 260}
-      to: {x: 260, y: 260}
+      from: new Point(400, 260)
+      to: new Point(260, 260)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: {x: 260, y: 260}
+      from: new Point(260, 260)
       to: @getButtonCenter("momentumButton")
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_TAP
@@ -650,20 +632,20 @@ class GearSketch
       duration: 1500
     ,
       from: @getButtonCenter("momentumButton")
-      to: {x: 260, y: 180}
+      to: new Point(260, 180)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: {x: 260, y: 180}
-      to: {x: 300, y: 200}
+      from: new Point(260, 180)
+      to: new Point(300, 200)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: {x: 300, y: 200}
+      from: new Point(300, 200)
       to: @getButtonCenter("playButton")
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_TAP
@@ -678,14 +660,14 @@ class GearSketch
       duration: 3000
     ,
       from: @getButtonCenter("gearButton")
-      to: {x: 20, y: 350}
+      to: new Point(20, 350)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: {x: 20, y: 350}
-      to: {x: 400, y: 200}
+      from: new Point(20, 350)
+      to: new Point(400, 200)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
@@ -694,10 +676,8 @@ class GearSketch
 
   getButtonCenter: (buttonName) ->
     button = @buttons[buttonName]
-    buttonCenter = {x: button.location.x, y: button.location.y}
-    buttonCenter.x += 0.5 * button.width + button.padding
-    buttonCenter.y += 0.5 * button.height + button.padding
-    buttonCenter
+    buttonCorner = new Point(button.location.x, button.location.y)
+    buttonCorner.plus(new Point(0.5 * button.width + button.padding, 0.5 * button.height + button.padding))
 
   updateDemo: (delta) ->
     # check if resting or if last movement completed
@@ -711,7 +691,7 @@ class GearSketch
     # advance movement
     movement = @demoMovements[@currentDemoMovement]
     if @movementCompletion is 0
-      @pointerLocation = {x: movement.from.x, y: movement.from.y}
+      @pointerLocation = movement.from.clone()
       if movement.atStart is MovementAction.PEN_DOWN
         @handlePenDown(@pointerLocation.x, @pointerLocation.y)
     if @movementCompletion < 1
@@ -730,14 +710,11 @@ class GearSketch
 
   updatePointerLocation: (movement, movementCompletion) ->
     if movement.type is MovementType.STRAIGHT
-      dx = movement.to.x - movement.from.x
-      dy = movement.to.y - movement.from.y
-      @pointerLocation.x = movement.from.x + movementCompletion * dx
-      @pointerLocation.y = movement.from.y + movementCompletion * dy
+      delta = movement.to.minus(movement.from)
+      @pointerLocation = movement.from.plus(delta.times(movementCompletion))
     else if movement.type is MovementType.CIRCLE
-      center = {x: movement.from.x , y: movement.from.y + movement.radius}
-      @pointerLocation.x = center.x + movement.radius * Math.cos((movementCompletion + 0.25) * 2 * Math.PI)
-      @pointerLocation.y = center.y + movement.radius * Math.sin((movementCompletion - 0.25) * 2 * Math.PI)
+      center = new Point(movement.from.x , movement.from.y + movement.radius)
+      @pointerLocation = center.plus(Point.polar(Math.PI - (movementCompletion - 0.25) * 2 * Math.PI, movement.radius))
 
   playDemo: ->
     @loadDemoMovements() # load these on each play in case canvas size changed

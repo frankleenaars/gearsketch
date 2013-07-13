@@ -5,9 +5,41 @@
 window.gearsketch = {}
 
 # ---------------------------
+# ---------- Point ----------
+# ---------------------------
+class Point
+  constructor: (@x, @y) ->
+
+  plus: (p) ->
+    new Point(@x + p.x, @y + p.y)
+
+  minus: (p) ->
+    new Point(@x - p.x, @y - p.y)
+
+  times: (n) ->
+    new Point(n * @x, n * @y)
+
+  distance: (p) ->
+    Math.sqrt(Math.pow(@x - p.x, 2) + Math.pow(@y - p.y, 2))
+
+  cross: (p) ->
+    @x * p.y - @y * p.x
+
+  clone: ->
+    new Point(@x, @y)
+
+  @polar: (theta, r) ->
+    new Point(r * Math.cos(theta), r * Math.sin(theta))
+
+window.gearsketch.Point = Point
+
+# ---------------------------
 # ---------- Util -----------
 # ---------------------------
 class Util
+  # imports
+  Point = window.gearsketch.Point
+
   # -- constants --
   @MODULE: 6
   @AXIS_RADIUS: 1.5 * @MODULE
@@ -24,14 +56,14 @@ class Util
   @Side:
     LEFT: "left"
     RIGHT: "right"
-    ON_LINE: "on line"
+    ON_LINE: "on line" # TODO: REMOVE IF UNNECESSARY
 
   # http://stackoverflow.com/questions/728360/most-elegant-way-to-clone-a-javascript-object
   @clone: (obj) ->
     if !obj? or (typeof obj isnt "object")
       return obj
 
-    knownClasses = ["Gear", "ArcSegment", "LineSegment", "Chain"]
+    knownClasses = ["Point", "Gear", "ArcSegment", "LineSegment", "Chain"]
     if obj.constructor.name in knownClasses
       return obj.clone()
 
@@ -49,29 +81,12 @@ class Util
 
     throw new Error("Unable to clone object. Its type is not supported.")
 
-  @addPoints: () ->
-    point = {x: 0, y: 0}
-    for p in arguments
-      point.x += p.x
-      point.y += p.y
-    point
-
-  @subtractPoints: (p1, p2) -> # TODO: use this and addPoints everywhere
-    {x: p1.x - p2.x, y: p1.y - p2.y}
-
-  @cross: (p1, p2) ->
-    p1.x * p2.y - p1.y * p2.x
-
-  @getDistance: (p1, p2) ->
-    Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2))
-
   @getEdgeDistance: (gear1, gear2) ->
-    axisDistance = @getDistance(gear1.location, gear2.location)
+    axisDistance = gear1.location.distance(gear2.location)
     Math.abs(axisDistance - gear1.pitchRadius - gear2.pitchRadius)
 
   @getDistanceToGear: (p, gear) ->
-    #Math.max(0, @getDistance(p, gear.location) - gear.outerRadius)
-    Math.max(0, @getDistance(p, gear.location) - gear.pitchRadius)
+    Math.max(0, p.distance(gear.location) - gear.pitchRadius)
 
   @mod: (a, b) ->
     (a % b + b) % b
@@ -99,8 +114,8 @@ class Util
     @addAll(set, elements)
 
   @getPointOnLineSegment: (a, b, distance) ->
-    fraction = distance / @getDistance(a, b)
-    {x: a.x + fraction * (b.x - a.x), y: a.y + fraction * (b.y - a.y)}
+    fraction = distance / a.distance(b)
+    a.plus(b.minus(a).times(fraction))
 
   # find the point on the path at the given distance from its start
   @findPointOnPath: (path, distance) ->
@@ -111,7 +126,7 @@ class Util
       j = (i + 1) % numberOfPoints
       p1 = path[i]
       p2 = path[j]
-      segmentLength = @getDistance(p1, p2)
+      segmentLength = p1.distance(p2)
       if distanceToGo <= segmentLength
         return @getPointOnLineSegment(p1, p2, distanceToGo)
       else
@@ -125,7 +140,7 @@ class Util
     finalIndex = numberOfPoints - (if isPathClosed then 0 else 1)
     for i in [0...finalIndex]
       j = (i + 1) % numberOfPoints
-      length += @getDistance(path[i], path[j])
+      length += path[i].distance(path[j])
     length
 
   # http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
@@ -147,9 +162,7 @@ class Util
 
   @isGearInsidePolygon: (gear, polygon) ->
     edgePointAtAngle = (angle) ->
-      x: gear.location.x + Math.cos(angle) * gear.innerRadius
-      y: gear.location.y + Math.sin(angle) * gear.innerRadius
-
+      gear.location.plus(Point.polar(angle, gear.innerRadius))
     edgePoints = (edgePointAtAngle(0.25 * Math.PI * i) for i in [0...8])
     edgePoints.every((p) => @isPointInsidePolygon(p, polygon))
 
@@ -159,23 +172,23 @@ class Util
   # find distance between point p and line segment ab
   # http://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment
   @getPointLineSegmentDistance: (p, a, b) ->
-    segmentLength = @getDistance(a, b)
+    segmentLength = a.distance(b)
     if segmentLength is 0
-      @getDistance(p, a)
+      p.distance(a)
     else
       t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (segmentLength * segmentLength)
       if t < 0
-        @getDistance(p, a)
+        p.distance(a)
       else if t > 1
-        @getDistance(p, b)
+        p.distance(b)
       else
-        projection = {x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y)}
-        @getDistance(p, projection)
+        projection = a.plus(b.minus(a).times(t))
+        p.distance(projection)
 
   @doesGearIntersectSegment: (gear, a, b) ->
-    #@getPointLineSegmentDistance(gear.location, a, b) < gear.outerRadius + @EPSILON
-    @getPointLineSegmentDistance(gear.location, a, b) < gear.pitchRadius + Util.EPSILON
+    @getPointLineSegmentDistance(gear.location, a, b) < (gear.pitchRadius + Util.EPSILON)
 
+  # TODO: REMOVE?
   @doesGearIntersectTriangle: (gear, triangle) ->
     @isPointInsidePolygon(gear.location, triangle) or
     @doesGearIntersectSegment(gear, triangle[0], triangle[1]) or
@@ -184,6 +197,7 @@ class Util
 
   @findGearsIntersectingTriangle: (gears, triangle) ->
     (gear for own id, gear of gears when @doesGearIntersectTriangle(gear, triangle))
+  # END REMOVE?
 
   @findGearsIntersectingSegment: (gears, a, b) ->
     (gear for own id, gear of gears when @doesGearIntersectSegment(gear, a, b))
@@ -198,9 +212,6 @@ class Util
       d = Math.max(0, @getPointLineSegmentDistance(point, path[i], path[j]))
       distance = Math.min(distance, d)
     distance
-
-#  @getGearPathDistance: (gear, path, isPathClosed = true) ->
-#    Math.max(0, @getPointPathDistance(gear.location, path, isPathClosed) - gear.pitchRadius)
 
   @doesChainCrossGear: (chain, gear) ->
     @getPointPathDistance(gear.location, chain.points) < gear.pitchRadius
@@ -218,14 +229,14 @@ class Util
   # http://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
   @findLineSegmentIntersection: (segment1, segment2) ->
     p = segment1[0]
-    r = @subtractPoints(segment1[1], p)
+    r = segment1[1].minus(p)
     q = segment2[0]
-    s = @subtractPoints(segment2[1], q)
-    crossRS = @cross(r, s)
-    t = @cross(@subtractPoints(q, p), s) / crossRS
-    u = @cross(@subtractPoints(q, p), r) / crossRS
+    s = segment2[1].minus(q)
+    crossRS = r.cross(s)
+    t = q.minus(p).cross(s) / crossRS
+    u = q.minus(p).cross(r) / crossRS
     if Math.abs(crossRS) > Util.EPSILON and 0 <= t and t <= 1 and 0 <= u and u <= 1
-      @addPoints(p, {x: t * r.x, y: t * r.y})
+      p.plus(r.times(t))
     else
       null
 
@@ -253,29 +264,25 @@ class Util
       @Side.LEFT
     else
       @Side.RIGHT
+  # END REMOVE?
 
   # get the two tangent points on a circle with center c and radius r from a given point p
   # tangent points are only valid if |pc| > r
   @findTangentPoints: (p, c, r) ->
     tangentPoints = {}
-    d = @getDistance(p, c)
+    d = p.distance(c)
     if Math.abs(d - r) < Util.EPSILON # p on circle
-      tangentPoints[@Side.RIGHT] = {x: p.x, y: p.y}
-      tangentPoints[@Side.LEFT] = {x: p.x, y: p.y}
+      tangentPoints[@Side.RIGHT] = p.clone()
+      tangentPoints[@Side.LEFT] = p.clone()
     else
       l = Math.sqrt(d * d - r * r)
       alpha = Math.atan2(c.y - p.y, c.x - p.x)
       beta = Math.asin(r / d)
-      p1x = p.x + Math.cos(alpha + beta) * l
-      p1y = p.y + Math.sin(alpha + beta) * l
-      p2x = p.x + Math.cos(alpha - beta) * l
-      p2y = p.y + Math.sin(alpha - beta) * l
-      tangentPoints[@Side.RIGHT] = {x: p1x, y: p1y}
-      tangentPoints[@Side.LEFT] = {x: p2x, y: p2y}
+      tangentPoints[@Side.RIGHT] = p.plus(Point.polar(alpha + beta, l))
+      tangentPoints[@Side.LEFT] = p.plus(Point.polar(alpha - beta, l))
     tangentPoints
 
   @findGearTangentPoints: (p, gear) ->
-    #@findTangentPoints(p, gear.location, gear.outerRadius)
     @findTangentPoints(p, gear.location, gear.pitchRadius)
 
   # http://en.wikipedia.org/wiki/Tangent_lines_to_circles
@@ -291,17 +298,17 @@ class Util
       tangentPoints[@Side.LEFT] = o1
       tangentPoints[@Side.RIGHT] = o1
       angle = Math.atan2(o2.y - o1.y, o2.x - o1.x)
-      offset1 = {x: Math.cos(angle + 0.5 * Math.PI) * r1, y: Math.sin(angle + 0.5 * Math.PI) * r1}
-      offset2 = {x: Math.cos(angle - 0.5 * Math.PI) * r1, y: Math.sin(angle - 0.5 * Math.PI) * r1}
+      offset1 = Point.polar(angle + 0.5 * Math.PI, r1)
+      offset2 = Point.polar(angle - 0.5 * Math.PI, r1)
     else
       tangentPoints = @findTangentPoints(o2, o1, r3)
       ratio = r2 / r3
       tpl = tangentPoints[@Side.LEFT]
       tpr = tangentPoints[@Side.RIGHT]
-      offset1 = {x: ratio * (tpl.x - o1.x), y: ratio * (tpl.y - o1.y)}
-      offset2 = {x: ratio * (tpr.x - o1.x), y: ratio * (tpr.y - o1.y)}
-    tangentLine1 = [@addPoints(tangentPoints[@Side.LEFT], offset1), @addPoints(o2, offset1)]
-    tangentLine2 = [@addPoints(tangentPoints[@Side.RIGHT], offset2), @addPoints(o2, offset2)]
+      offset1 = tpl.minus(o1).times(ratio)
+      offset2 = tpr.minus(o1).times(ratio)
+    tangentLine1 = [tangentPoints[@Side.LEFT].plus(offset1), o2.plus(offset1)]
+    tangentLine2 = [tangentPoints[@Side.RIGHT].plus(offset2), o2.plus(offset2)]
     tangentLines = {}
     if o1 is centers[0]
       tangentLines[@Side.RIGHT] = tangentLine1
@@ -323,10 +330,10 @@ class Util
     ratio = r2 / r3
     tpl = tangentPoints[@Side.LEFT]
     tpr = tangentPoints[@Side.RIGHT]
-    offset1 = {x: ratio * (o1.x - tpl.x), y: ratio * (o1.y - tpl.y)}
-    offset2 = {x: ratio * (o1.x - tpr.x), y: ratio * (o1.y - tpr.y)}
-    tangentLine1 = [@addPoints(tpl, offset1), @addPoints(o2, offset1)]
-    tangentLine2 = [@addPoints(tpr, offset2), @addPoints(o2, offset2)]
+    offset1 = o1.minus(tpl).times(ratio)
+    offset2 = o1.minus(tpr).times(ratio)
+    tangentLine1 = [tpl.plus(offset1), o2.plus(offset1)]
+    tangentLine2 = [tpr.plus(offset2), o2.plus(offset2)]
     tangentLines = {}
     if o1 is centers[0]
       tangentLines[@Side.RIGHT] = tangentLine1
@@ -337,11 +344,9 @@ class Util
     tangentLines
 
   @findExternalTangentsOfGears: (gear1, gear2) ->
-    #@findExternalTangents([gear1.location, gear2.location], [gear1.outerRadius, gear2.outerRadius])
     @findExternalTangents([gear1.location, gear2.location], [gear1.pitchRadius, gear2.pitchRadius])
 
   @findInternalTangentsOfGears: (gear1, gear2) ->
-    #@findInternalTangents([gear1.location, gear2.location], [gear1.outerRadius, gear2.outerRadius])
     @findInternalTangents([gear1.location, gear2.location], [gear1.pitchRadius, gear2.pitchRadius])
 
   @findTangentLine: (gear1, gear2, innerGearIds, direction) ->

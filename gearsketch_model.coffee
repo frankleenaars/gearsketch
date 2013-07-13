@@ -7,6 +7,7 @@
 # - fix crashing bugs when dragging gear from chain (possibly indirectly)
 
 # imports
+Point = window.gearsketch.Point
 Util = window.gearsketch.Util
 
 window.gearsketch.model = {}
@@ -28,7 +29,7 @@ class Gear
     @outerRadius = Util.MODULE * (0.5 * @numberOfTeeth + 1)
 
   clone: ->
-    new Gear(Util.clone(@location), @rotation, @numberOfTeeth, @id)
+    new Gear(@location.clone(), @rotation, @numberOfTeeth, @id)
 
 window.gearsketch.model.Gear = Gear
 
@@ -49,7 +50,7 @@ class ArcSegment
   findPoint: (distanceToGo) ->
     angleToGo = distanceToGo / @radius
     angle = @start + (if @direction is Util.Direction.CLOCKWISE then angleToGo else -angleToGo)
-    {x: @center.x + Math.cos(angle) * @radius, y: @center.y + Math.sin(angle) * @radius}
+    @center.plus(Point.polar(angle, @radius))
 
   doesArcContainAngle: (angle) ->
     if @direction is Util.Direction.CLOCKWISE
@@ -60,11 +61,11 @@ class ArcSegment
   getDistanceToPoint: (point) ->
     angle = Math.atan2(point.y - @center.y, point.x - @center.x)
     if @doesArcContainAngle(angle)
-      Math.abs(Util.getDistance(point, @center) - @radius)
+      Math.abs(point.distance(@center) - @radius)
     else
-      startPoint = {x: @center.x + Math.cos(@start) * @radius, y: @center.y + Math.sin(@start) * @radius}
-      endPoint = {x: @center.x + Math.cos(@end) * @radius, y: @center.y + Math.sin(@end) * @radius}
-      Math.min(Util.getDistance(point, startPoint), Util.getDistance(point, endPoint))
+      startPoint = @center.plus(Point.polar(@start, @radius))
+      endPoint = @center.plus(Point.polar(@end, @radius))
+      Math.min(point.distance(startPoint), point.distance(endPoint))
 
   # TODO: find distance analytically
   getDistanceToSegment: (segment) ->
@@ -72,7 +73,7 @@ class ArcSegment
     Math.min.apply(null, @getDistanceToPoint(segment.findPoint(d)) for d in [0...Math.ceil(segment.getLength())])
 
   clone: ->
-    new ArcSegment(Util.clone(@center), @radius, @start, @end, @direction)
+    new ArcSegment(@center.clone(), @radius, @start, @end, @direction)
 
 window.gearsketch.model.ArcSegment = ArcSegment
 
@@ -83,7 +84,7 @@ class LineSegment
   constructor: (@start, @end) ->
 
   getLength: ->
-    Util.getDistance(@start, @end)
+    @start.distance(@end)
 
   findPoint: (distanceToGo) ->
     Util.getPointOnLineSegment(@start, @end, distanceToGo)
@@ -105,9 +106,7 @@ class LineSegment
       segment.getDistanceToSegment(this)
 
   clone: ->
-    new LineSegment(Util.clone(@start), Util.clone(@end))
-
-
+    new LineSegment(@start.clone(), @end.clone())
 
 window.gearsketch.model.LineSegment = LineSegment
 
@@ -136,7 +135,7 @@ class Chain
     else
       @id = nextChainId
       nextChainId++
-    @points = ({x, y} for {x, y} in stroke)
+    @points = Util.clone(stroke)
 
   getLength: ->
     length = 0
@@ -260,7 +259,7 @@ class Chain
       j = (i + 1) % numberOfGears
       g1 = gearsList[i]
       g2 = gearsList[j]
-      if Util.getDistance(g1.location, g2.location) < (g1.outerRadius + g2.outerRadius)
+      if g1.location.distance(g2.location) < (g1.outerRadius + g2.outerRadius)
         return true
     false
 
@@ -304,7 +303,7 @@ class Chain
           if currentDistance < 0 or distance < currentDistance
             acknowledgedLevels[group] = parseInt(level, 10)
 
-    # ignore all gears not in an acknowledged level
+    # ignore all gears not on an acknowledged level
     ignoredGearIds = {}
     for own id, gear of gears
       if acknowledgedLevels[board.getGroup(gear)] isnt board.getLevel(gear)
@@ -333,7 +332,7 @@ class Chain
     acknowledgedGears = board.getAcknowledgedGears(@ignoredGearIds)
 
     # first: update gear sequence
-    # TODO: update ignored gears, should include overlapping gears in different groups
+    # TODO: update ignored gears, should include overlapping gears in different groups (needed?)
     i = 0
     while i < (numberOfGears = gears.length)
       #console.log("while4")
@@ -397,7 +396,7 @@ class Chain
         if i isnt 0 or j isnt numberOfSegments - 1 # don't compare first and last segments
           s1 = updatedSegments[i]
           s2 = updatedSegments[j]
-          if s1.getDistanceToSegment(s2) < (Chain.WIDTH / 2 + Util.EPSILON)
+          if s1.getDistanceToSegment(s2) < (Chain.WIDTH / 2 + Util.EPSILON) # TODO: don't divide by two?
             # make sure segments are not connected by a very small ArcSegment
             if (i + 2) is j
               middleSegment = updatedSegments[i + 1]
@@ -450,6 +449,9 @@ window.gearsketch.model.Chain = Chain
 # ---------------------------
 # ---------- Board ----------
 # ---------------------------
+# TODO:
+# - make it possible for multiple connections to exist between gears in some cases (e.g. two chains on different sides)
+
 class Board
   # -- imported constants --
   MODULE = Util.MODULE
@@ -470,21 +472,14 @@ class Board
   momenta: {}
   chains: {}
 
-  # should probably add board.clone() method
+  # TODO: should probably add board.clone() method
   saveBoard: ->
-#    gears: JSON.parse(JSON.stringify(@gears))
-#    connections: JSON.parse(JSON.stringify(@connections))
-#    groups: JSON.parse(JSON.stringify(@groups))
-#    levels: JSON.parse(JSON.stringify(@levels))
-#    momenta: JSON.parse(JSON.stringify(@momenta))
-    #chains: JSON.parse(JSON.stringify(@chains))
     gears: Util.clone(@gears)
     connections: Util.clone(@connections)
     groups: Util.clone(@groups)
     levels: Util.clone(@levels)
     momenta: Util.clone(@momenta)
     chains: Util.clone(@chains)
-
 
   restoreBoard: (board) ->
     for own id, gear of @gears
@@ -533,13 +528,6 @@ class Board
   getLevelScore: (gear) ->
     1000 * @groups[gear.id] + @levels[gear.id]
 
-#  getSortedGroupList: ->
-#    groupSet = {}
-#    for gearId, group of @groups
-#      groupSet[group] = true
-#    groups = (group for own group of groupSet)
-#    groups.sort((g1, g2) -> g1 - g2)
-
   getGearsSortedByGroupsAndLevel: (gears = @getGearList()) ->
     gearsWithLevelScore = []
     for gear in gears
@@ -547,9 +535,6 @@ class Board
       gearsWithLevelScore.push([gear, score])
     gearsWithLevelScore.sort((g1, g2) -> g1[1] - g2[1])
     (gearWithLevelScore[0] for gearWithLevelScore in gearsWithLevelScore)
-
-#  getGearsInGroupSortedByLevel: (group) ->
-#    @getGearsSortedByGroupsAndLevel((gear of @gears where @getGroup(gear) is group))
 
   removeConnection: (gear1, gear2) ->
     delete @connections[gear1.id][gear2.id]
@@ -566,7 +551,7 @@ class Board
     shortestDistance = Number.MAX_VALUE
     for own id, candidate of @gears
       if candidate isnt gear
-        distance = Util.getDistance(gear.location, candidate.location)
+        distance = gear.location.distance(candidate.location)
         if !nearestAxis or
         distance < (shortestDistance - EPSILON) or
         (distance < (shortestDistance + EPSILON) and
@@ -578,7 +563,6 @@ class Board
   updateGroupsAndLevelsFrom: (gearId, group, level, updatedGroups, updatedLevels) ->
     updatedGroups[gearId] = group
     updatedLevels[gearId] = level
-
     connections = @connections[gearId]
     for own neighborId, connectionType of connections
       if !(neighborId of updatedGroups)
@@ -595,7 +579,6 @@ class Board
   updateGroupsAndLevels: ->
     updatedGroups = {}
     updatedLevels = {}
-
     group = 0
     for own id, gear of @gears
       if !(id of updatedGroups)
@@ -666,8 +649,7 @@ class Board
 
   connectToAxis: (upperGear, lowerGear) ->
     @addConnection(upperGear, lowerGear, ConnectionType.AXIS)
-
-    upperGear.location = {x: lowerGear.location.x, y:lowerGear.location.y}
+    upperGear.location = lowerGear.location.clone()
     upperGear.rotation = lowerGear.rotation
     @alignMeshingGears(upperGear)
 
@@ -683,12 +665,9 @@ class Board
     nearestNeighbor
 
   connectToOneMeshingGear: (gear, meshingGear) ->
-    p1 = gear.location
-    p2 = meshingGear.location
-    angle = Math.atan2(p1.y - p2.y, p1.x - p2.x)
-    combinedPitchRadius = gear.pitchRadius + meshingGear.pitchRadius
-    gear.location.x = p2.x + Math.cos(angle) * combinedPitchRadius
-    gear.location.y = p2.y + Math.sin(angle) * combinedPitchRadius
+    delta = gear.location.minus(meshingGear.location)
+    angle = Math.atan2(delta.y, delta.x)
+    gear.location = meshingGear.location.plus(Point.polar(angle, gear.pitchRadius + meshingGear.pitchRadius))
     @alignGearTeeth(gear, meshingGear)
     @addConnection(gear, meshingGear, ConnectionType.MESHING)
 
@@ -700,11 +679,11 @@ class Board
     r0 = meshingGear1.pitchRadius + gear.pitchRadius
     r1 = meshingGear2.pitchRadius + gear.pitchRadius
 
-    d = Util.getDistance(p0, p1)
+    d = p0.distance(p1)
 
     # check whether meshing gears are close enough to each other and not
     # on top of each other; connect gear to closest meshing gear otherwise
-    if r0 + r1 < d or Util.getDistance(meshingGear1.location, meshingGear2.location) < EPSILON
+    if r0 + r1 < d or p0.distance(p1) < EPSILON
       if Util.getEdgeDistance(gear, meshingGear1) < Util.getEdgeDistance(gear, meshingGear2)
         @connectToOneMeshingGear(gear, meshingGear1)
         return
@@ -716,17 +695,15 @@ class Board
     a = (r0 * r0 - r1 * r1 + d * d) / (2 * d)
     h = Math.sqrt(r0 * r0 - a * a)
 
-    p2x = p0.x + a * (p1.x - p0.x) / d
-    p2y = p0.y + a * (p1.y - p0.y) / d
+    p2 = p0.plus(p1.minus(p0).times(a / d))
+    p3x1 = p2.x + h * (p1.y - p0.y) / d
+    p3y1 = p2.y - h * (p1.x - p0.x) / d
+    p3x2 = p2.x - h * (p1.y - p0.y) / d
+    p3y2 = p2.y + h * (p1.x - p0.x) / d
+    p3_1 = new Point(p3x1, p3y1)
+    p3_2 = new Point(p3x2, p3y2)
 
-    p3x1 = p2x + h * (p1.y - p0.y) / d
-    p3y1 = p2y - h * (p1.x - p0.x) / d
-    p3x2 = p2x - h * (p1.y - p0.y) / d
-    p3y2 = p2y + h * (p1.x - p0.x) / d
-    p3_1 = {x: p3x1, y: p3y1}
-    p3_2 = {x: p3x2, y: p3y2}
-
-    if Util.getDistance(gear.location, p3_1) < Util.getDistance(gear.location, p3_2)
+    if gear.location.distance(p3_1) < gear.location.distance(p3_2)
       gear.location = p3_1
     else
       gear.location = p3_2
@@ -763,7 +740,7 @@ class Board
         unless gear1 is gear2
           group2 = @groups[id2]
           level2 = @levels[id2]
-          axisDistance = Util.getDistance(gear1.location, gear2.location)
+          axisDistance = gear1.location.distance(gear2.location)
           maxOuterRadius = Math.max(gear1.outerRadius, gear2.outerRadius)
           combinedOuterRadius = gear1.outerRadius + gear2.outerRadius
           if axisDistance < EPSILON
@@ -779,11 +756,10 @@ class Board
   placeGear: (gear, location) ->
     oldBoard = @saveBoard()
     @removeAllConnections(gear)
-    gear.location = {x: location.x, y: location.y}
-
+    gear.location = location.clone()
     nearestAxis = @findNearestAxis(gear)
     if nearestAxis and
-    Util.getDistance(gear.location, nearestAxis.location) < SNAPPING_DISTANCE and
+    gear.location.distance(nearestAxis.location) < SNAPPING_DISTANCE and
     nearestAxis.numberOfTeeth - gear.numberOfTeeth > MIN_STACKED_GEARS_TEETH_DIFFERENCE
       # connect gear to axis of larger gear
       @connectToAxis(gear, nearestAxis)
@@ -851,7 +827,7 @@ class Board
   getGearAt: (location) ->
     gear = null
     for own id, candidate of @gears
-      distance = Util.getDistance(location, candidate.location)
+      distance = location.distance(candidate.location)
       if distance < candidate.outerRadius
         if !gear or candidate.numberOfTeeth < gear.numberOfTeeth
           gear = candidate
