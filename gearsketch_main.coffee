@@ -124,7 +124,7 @@ class GearSketch
     unless @isDemoPlaying
       @handlePenUp()
 
-  handlePenDown: (x, y) -> # TODO: add point to stroke here?
+  handlePenDown: (x, y) ->
     point = new Point(x, y)
     if @isPenDown
       # pen released outside of canvas
@@ -140,8 +140,11 @@ class GearSketch
         @selectedGear = @board.getGearAt(point)
         if @selectedGear
           @offset = point.minus(@selectedGear.location)
+        else
+          @stroke.push(point)
         @isPenDown = true
       else if @selectedButton is "chainButton"
+        @stroke.push(point)
         @isPenDown = true
       else if @selectedButton is "momentumButton"
         @selectedGear = @board.getGearAt(point)
