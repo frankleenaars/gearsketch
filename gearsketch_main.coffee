@@ -287,6 +287,7 @@ class GearSketch
     image.onload = => @gearImageLoaded(gear.numberOfTeeth, image)
     image.src = gearCanvas.toDataURL("image/png")
 
+  # TODO: should stroke chain intersection be exmined instead?
   removeStrokedChains: (stroke) ->
     lineSegment = new LineSegment(stroke[0], stroke[stroke.length - 1])
     for own id, chain of @board.getChains()
@@ -324,7 +325,7 @@ class GearSketch
     updateTime = new Date().getTime()
     delta = updateTime - @lastUpdateTime
     if @selectedButton is "playButton"
-      @board.rotateAllGears(delta / 1000)
+      @board.rotateAllTurningObjects(delta / 1000)
     if @isDemoPlaying
       @updateDemo(delta)
     @lastUpdateTime = updateTime
@@ -446,7 +447,8 @@ class GearSketch
     ctx.save()
     ctx.lineWidth = Chain.WIDTH
     ctx.lineCap = "round"
-    ctx.strokeStyle = "rgba(0, 0, 255, 0.8)"
+    #ctx.strokeStyle = "rgba(0, 0, 255, 0.8)"
+    ctx.strokeStyle = "rgb(0, 0, 255)"
     ctx.moveTo(chain.segments[0].start.x, chain.segments[0].start.y)
     for segment in chain.segments
       if segment instanceof ArcSegment
@@ -460,8 +462,14 @@ class GearSketch
         ctx.lineTo(segment.end.x, segment.end.y)
         ctx.stroke()
     ctx.fillStyle = "white"
+    tmpFirst = true # TODO: REMOVE
     for point in chain.findPointsOnChain(25)
       ctx.beginPath()
+      if tmpFirst
+        ctx.fillStyle = "red"
+        tmpFirst = false
+      else
+        ctx.fillStyle = "white"
       ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI, true)
       ctx.fill()
     ctx.restore()

@@ -2,10 +2,6 @@
 # University of Twente - Department of Instructional Technology
 "use strict"
 
-# TODO:
-# - point class with util methods
-# - fix crashing bugs when dragging gear from chain (possibly indirectly)
-
 # imports
 Point = window.gearsketch.Point
 Util = window.gearsketch.Util
@@ -22,11 +18,14 @@ class Gear
     if id?
       @id = id
     else
-      @id = nextGearId.toString()
+      @id = "g#{nextGearId}"
       nextGearId++
     @pitchRadius = Util.MODULE * (0.5 * @numberOfTeeth)
     @innerRadius = Util.MODULE * (0.5 * @numberOfTeeth - 1.25)
     @outerRadius = Util.MODULE * (0.5 * @numberOfTeeth + 1)
+
+  getCircumference: ->
+    2 * Math.PI * @pitchRadius
 
   clone: ->
     new Gear(@location.clone(), @rotation, @numberOfTeeth, @id)
@@ -113,16 +112,12 @@ window.gearsketch.model.LineSegment = LineSegment
 # ---------------------------
 # ---------- Chain ----------
 # ---------------------------
-# TODO:
-# connecting chain to gear with outerRadius, means that two gears
-# connected by a chain will not necessarily have the same tooth speed
-# use pitch radius instead?
 class Chain
   # imports
   ArcSegment = window.gearsketch.model.ArcSegment
   LineSegment = window.gearsketch.model.LineSegment
 
-  @WIDTH: 6
+  @WIDTH: 8
 
   nextChainId = 0
 
@@ -133,9 +128,10 @@ class Chain
     if id?
       @id = id
     else
-      @id = nextChainId
+      @id = "c#{nextChainId}"
       nextChainId++
     @points = Util.clone(stroke)
+    @rotation = 0
 
   getLength: ->
     length = 0
@@ -143,9 +139,19 @@ class Chain
       length += segment.getLength()
     length
 
+  getCircumference: ->
+    @getLength()
+
+  # rotation of the chain is always expressed clockwise
+  getStartingPoint: ->
+    if @direction is Util.Direction.CLOCKWISE
+      @rotation / (2 * Math.PI) * @getLength()
+    else
+      -@rotation / (2 * Math.PI) * @getLength()
+
   findPointOnChain: (distance) ->
     length = @getLength()
-    distanceToGo = Util.mod(distance, length)
+    distanceToGo = Util.mod(distance + @getStartingPoint(), length)
     for segment in @segments
       segmentLength = segment.getLength()
       if distanceToGo < segmentLength
@@ -163,6 +169,34 @@ class Chain
 
   getDistanceToLineSegment: (lineSegment) ->
     Math.min.apply(null, (segment.getDistanceToSegment(lineSegment) for segment in @segments))
+
+  # get the incoming or outgoing tangent point on the gear in @supportingGearIds with the given gearIndex
+  getPointOnSupportingGear: (gearIndex, incoming) ->
+    if incoming
+      @points[Util.mod(2 * gearIndex - 1, @points.length)]
+    else
+      @points[2 * gearIndex]
+
+  removeGear: (gear, board) ->
+    while (index = @supportingGearIds.indexOf(gear.id)) isnt -1
+      gears = board.getGearsWithIds(@supportingGearIds) # gear to remove will be undefined
+      numberOfGears = gears.length
+      beforeIndex = Util.mod((index - 1), numberOfGears)
+      beforeGear = gears[beforeIndex]
+      afterIndex = Util.mod((index + 1), numberOfGears)
+      acknowledgedGears = board.getAcknowledgedGears(@ignoredGearIds)
+      path = [
+        @getPointOnSupportingGear(index, true)
+        @getPointOnSupportingGear(index, false)
+        @getPointOnSupportingGear(afterIndex, true)
+      ]
+      Util.tempDrawPath(path)
+      replacementGears = @findSupportingGearsOnPath(acknowledgedGears, beforeGear, path, 0, false)
+      gears.splice.apply(gears, [index, 1].concat(replacementGears))
+      @removeRepeatedGears(gears)
+      @supportingGearIds = (g.id for g in gears)
+    return @updateChain(board)
+
 
 #  removeEmptyTriangles: (board) ->
 #    gears = board.getGearList()
@@ -310,9 +344,30 @@ class Chain
         ignoredGearIds[id] = true
     ignoredGearIds
 
+  findIgnoredGearIdsInTightenedChain: (board) ->
+    # find groups and levels of the gears in this chain
+    # there can be more than one group and level due to recently moved gear
+    groups = {}
+    for gearId in @supportingGearIds
+      gear = board.getGearWithId(gearId)
+      group = board.getGroup(gear)
+      level = board.getLevel(gear)
+      if !groups[group]?
+        groups[group] = {}
+      groups[group][level] = true
+
+    # ignore all gears that belong to a supporting gear's group but are on a different level
+    updatedIgnoredGearIds = {}
+    for id, gear of board.getGears()
+      group = board.getGroup(gear)
+      level = board.getLevel(gear)
+      if groups[group]? and !groups[group][level]?
+        updatedIgnoredGearIds[id] = true
+    @ignoredGearIds = updatedIgnoredGearIds
+
   # convert a list of segments to a polygon
   # used for finding gear centers inside a tightened chain
-  toPolygon: (segments)->
+  toPolygon: (segments = @segments)->
     polygon = []
     for segment in segments
       if segment instanceof LineSegment
@@ -329,10 +384,10 @@ class Chain
     if @containsSuccessiveOverlappingGears(gears)
       return false
 
-    acknowledgedGears = board.getAcknowledgedGears(@ignoredGearIds)
+    updatedIgnoredGearIds = @findIgnoredGearIdsInTightenedChain(board)
+    acknowledgedGears = board.getAcknowledgedGears(updatedIgnoredGearIds)
 
     # first: update gear sequence
-    # TODO: update ignored gears, should include overlapping gears in different groups (needed?)
     i = 0
     while i < (numberOfGears = gears.length)
       #console.log("while4")
@@ -396,33 +451,47 @@ class Chain
         if i isnt 0 or j isnt numberOfSegments - 1 # don't compare first and last segments
           s1 = updatedSegments[i]
           s2 = updatedSegments[j]
-          if s1.getDistanceToSegment(s2) < (Chain.WIDTH / 2 + Util.EPSILON) # TODO: don't divide by two?
+          if s1.getDistanceToSegment(s2) < Chain.WIDTH
             # make sure segments are not connected by a very small ArcSegment
             if (i + 2) is j
               middleSegment = updatedSegments[i + 1]
-              if (middleSegment instanceof ArcSegment) and (middleSegment.getLength() < Chain.WIDTH)
+              if (middleSegment instanceof ArcSegment) and (middleSegment.getLength() < 2 * Chain.WIDTH)
                 continue
             if ((j + 2) % numberOfSegments) is i # note: not else if, both can be true in chain with 4 segments
               middleSegment = updatedSegments[(j + 1) % numberOfSegments]
-              if (middleSegment instanceof ArcSegment) and (middleSegment.getLength() < Chain.WIDTH)
+              if (middleSegment instanceof ArcSegment) and (middleSegment.getLength() < 2 * Chain.WIDTH)
                 continue
             console.log("chain crosses itself")
             return false
 
+    # TODO: REMOVE?
     # fourth: check if innergears hasn't changed
+    #updatedIgnoredGearIds = @findIgnoredGearIdsInTightenedChain(board)
+    #updatedAcknowledgedGears = board.getAcknowledgedGears(updatedIgnoredGearIds)
+#    chainPolygon = @toPolygon(updatedSegments)
+#    updatedInnerGearIds =
+#      (gear.id for id, gear of acknowledgedGears when Util.isPointInsidePolygon(gear.location, chainPolygon))
+#    if !Util.areArraysEqual(@innerGearIds, updatedInnerGearIds)
+#      console.log("innerGears changed")
+#      return false
+    # END REMOVE
+
+    # fourth: update chain properties
+    updatedIgnoredGearIds = @findIgnoredGearIdsInTightenedChain(board)
+    updatedAcknowledgedGears = board.getAcknowledgedGears(updatedIgnoredGearIds)
     chainPolygon = @toPolygon(updatedSegments)
     updatedInnerGearIds =
-      (gear.id for id, gear of acknowledgedGears when Util.isPointInsidePolygon(gear.location, chainPolygon))
-    if !Util.areArraysEqual(@innerGearIds, updatedInnerGearIds)
-      console.log("innerGears changed")
-      return false
-
+      (gear.id for id, gear of updatedAcknowledgedGears when Util.isPointInsidePolygon(gear.location, chainPolygon))
     @points = updatedPoints
     @segments = updatedSegments
+    @ignoredGearIds = updatedIgnoredGearIds
+    @innerGearIds = updatedInnerGearIds
     @supportingGearIds = (gear.id for gear in gears)
     true
 
   tightenChain: (board) ->
+    # TODO:
+    # change innerGearIds to object?
     #@removeEmptyTriangles(board)
     #@ensureFreeFirstPoint(board)
     @ignoredGearIds = @findIgnoredGearIds(board)
@@ -450,7 +519,7 @@ window.gearsketch.model.Chain = Chain
 # ---------- Board ----------
 # ---------------------------
 # TODO:
-# - make it possible for multiple connections to exist between gears in some cases (e.g. two chains on different sides)
+# - check teeth alignments and connection rotation direction and speed instead of cycles
 
 class Board
   # -- imported constants --
@@ -460,10 +529,12 @@ class Board
   SNAPPING_DISTANCE = Util.SNAPPING_DISTANCE
   EPSILON = Util.EPSILON
 
-  ConnectionType =
+  ConnectionType = # connections are between two gears or a gear and a chain
     ANY: "any"
     MESHING: "meshing"
     AXIS: "axis"
+    CHAIN_INSIDE: "chain_inside"
+    CHAIN_OUTSIDE: "chain_outside"
 
   gears: {}
   connections: {}
@@ -472,7 +543,7 @@ class Board
   momenta: {}
   chains: {}
 
-  # TODO: should probably add board.clone() method
+  # TODO: should probably add board.clone() method and/or use constructor
   saveBoard: ->
     gears: Util.clone(@gears)
     connections: Util.clone(@connections)
@@ -536,14 +607,14 @@ class Board
     gearsWithLevelScore.sort((g1, g2) -> g1[1] - g2[1])
     (gearWithLevelScore[0] for gearWithLevelScore in gearsWithLevelScore)
 
-  removeConnection: (gear1, gear2) ->
-    delete @connections[gear1.id][gear2.id]
-    delete @connections[gear2.id][gear1.id]
+  removeConnection: (turningObject1, turningObject2) ->
+    delete @connections[turningObject1.id][turningObject2.id]
+    delete @connections[turningObject2.id][turningObject1.id]
 
-  removeAllConnections: (gear) ->
-    for own connectedGearId, connectionType of @connections[gear.id]
-      connectedGear = @gears[connectedGearId]
-      @removeConnection(gear, connectedGear)
+  removeAllConnections: (turningObject) ->
+    for own neighborId, connectionType of @connections[turningObject.id]
+      neighbor = @getTurningObjects()[neighborId]
+      @removeConnection(turningObject, neighbor)
     @updateGroupsAndLevels()
 
   findNearestAxis: (gear) ->
@@ -560,16 +631,17 @@ class Board
           shortestDistance = distance
     nearestAxis
 
-  updateGroupsAndLevelsFrom: (gearId, group, level, updatedGroups, updatedLevels) ->
-    updatedGroups[gearId] = group
-    updatedLevels[gearId] = level
-    connections = @connections[gearId]
+  updateGroupsAndLevelsFrom: (turningObjectId, group, level, updatedGroups, updatedLevels) ->
+    updatedGroups[turningObjectId] = group
+    updatedLevels[turningObjectId] = level
+    connections = @connections[turningObjectId]
+    sameLevelConnectionTypes = [ConnectionType.MESHING, ConnectionType.CHAIN_INSIDE, ConnectionType.CHAIN_OUTSIDE]
     for own neighborId, connectionType of connections
       if !(neighborId of updatedGroups)
-        if connectionType is ConnectionType.MESHING
+        if connectionType in sameLevelConnectionTypes
           @updateGroupsAndLevelsFrom(neighborId, group, level, updatedGroups, updatedLevels)
         else
-          gear = @gears[gearId]
+          gear = @gears[turningObjectId]
           neighbor = @gears[neighborId]
           if gear.numberOfTeeth > neighbor.numberOfTeeth
             @updateGroupsAndLevelsFrom(neighborId, group, level + 1, updatedGroups, updatedLevels)
@@ -580,16 +652,16 @@ class Board
     updatedGroups = {}
     updatedLevels = {}
     group = 0
-    for own id, gear of @gears
+    for own id, gear of @gears # chains are always connected to gears, so will be updated as well
       if !(id of updatedGroups)
         @updateGroupsAndLevelsFrom(id, group, 0, updatedGroups, updatedLevels)
         group++
     @groups = updatedGroups
     @levels = updatedLevels
 
-  addConnection: (gear1, gear2, connectionType) ->
-    @connections[gear1.id][gear2.id] = connectionType
-    @connections[gear2.id][gear1.id] = connectionType
+  addConnection: (turningObject1, turningObject2, connectionType) ->
+    @connections[turningObject1.id][turningObject2.id] = connectionType
+    @connections[turningObject2.id][turningObject1.id] = connectionType
     @updateGroupsAndLevels()
 
   findMeshingNeighbors: (gear) ->
@@ -620,19 +692,25 @@ class Board
     phaseSum = (phase1 + phase2) % 1
     rotatingGear.rotation = r1 + (phaseSum - 0.25) * toothAngle1
 
-  rotateGearsFrom: (gear, angle, rotatedGearIds) ->
-    if !(gear.id of rotatedGearIds)
-      gear.rotation = Util.mod(gear.rotation + angle, 2 * Math.PI)
-      rotatedGearIds[gear.id] = true
+  rotateTurningObjectsFrom: (turningObject, angle, rotatedTurningObjectIds) ->
+    if !(turningObject.id of rotatedTurningObjectIds)
+      turningObject.rotation = Util.mod(turningObject.rotation + angle, 2 * Math.PI)
+      rotatedTurningObjectIds[turningObject.id] = true
 
-    connections = @connections[gear.id]
-    for own connectedGearId, connectionType of connections
-      connectedGear = @gears[connectedGearId]
-      if !(connectedGearId of rotatedGearIds)
-        if connectionType is ConnectionType.MESHING
-          @rotateGearsFrom(connectedGear, -angle * gear.numberOfTeeth / connectedGear.numberOfTeeth, rotatedGearIds)
-        else
-          @rotateGearsFrom(connectedGear, angle, rotatedGearIds)
+    connections = @connections[turningObject.id]
+    for own neighborId, connectionType of connections
+      neighbor = @getTurningObjects()[neighborId]
+      if !(neighborId of rotatedTurningObjectIds)
+        if connectionType is ConnectionType.AXIS
+          @rotateTurningObjectsFrom(neighbor, angle, rotatedTurningObjectIds)
+        else if (connectionType is ConnectionType.MESHING) or (connectionType is ConnectionType.CHAIN_OUTSIDE)
+          @rotateTurningObjectsFrom(neighbor
+          , -angle * turningObject.getCircumference() / neighbor.getCircumference()
+          , rotatedTurningObjectIds)
+        else # gear inside chain
+          @rotateTurningObjectsFrom(neighbor
+          , angle * turningObject.getCircumference() / neighbor.getCircumference()
+          , rotatedTurningObjectIds)
 
   alignMeshingGears: (gear) ->
     rotatedGearIds = {}
@@ -644,8 +722,7 @@ class Board
       @alignGearTeeth(neighbor, gear)
       angle = neighbor.rotation - r
       rotatedGearIds[neighbor.id] = true
-      @rotateGearsFrom(neighbor, angle, rotatedGearIds)
-
+      @rotateTurningObjectsFrom(neighbor, angle, rotatedGearIds)
 
   connectToAxis: (upperGear, lowerGear) ->
     @addConnection(upperGear, lowerGear, ConnectionType.AXIS)
@@ -773,20 +850,31 @@ class Board
         else
           @connectToOneMeshingGear(gear, neighbor1)
 
-    # check if board is valid
-    if @isBoardValid()
-      # TODO: refactor
-      chainsValid = true
-      for own id, chain of @chains
-        chainsValid = chainsValid and chain.updateChain(this)
-      if chainsValid
-        true
+    # update chains
+    for own id, chain of @chains
+      if chain.updateChain(this)
+        @removeAllConnections(chain)
+        @addChainConnections(chain)
       else
         @restoreBoard(oldBoard)
-        false
+        return false
+
+    # check if board is valid
+    if @isBoardValid()
+      true
     else
       @restoreBoard(oldBoard)
       false
+
+  addGearToChains: (gear) ->
+    for own id, chain of @chains
+      if Util.isPointInsidePolygon(gear.location, chain.toPolygon())
+        chain.innerGearIds.push(gear.id)
+
+  removeGearFromChains: (gear) ->
+    for own id, chain of @chains
+      if !chain.removeGear(gear, this)
+        @removeChain(chain)
 
   addGear: (gear) ->
     oldBoard = @saveBoard()
@@ -794,6 +882,7 @@ class Board
     @connections[gear.id] = {}
     @groups[gear.id] = @getNextGroup()
     @levels[gear.id] = 0
+    @addGearToChains(gear)
     if !@placeGear(gear, gear.location)
       @removeGear(gear)
       @restoreBoard(oldBoard)
@@ -823,6 +912,8 @@ class Board
     delete @connections[gear.id]
     delete @groups[gear.id]
     delete @levels[gear.id]
+    @removeGearFromChains(gear)
+    # TODO: check for overlapping chains?
 
   getGearAt: (location) ->
     gear = null
@@ -837,23 +928,52 @@ class Board
     @gears[id]
 
   getGearsWithIds: (ids) ->
-    @gears[id] for id in ids
+    (@gears[id] for id in ids)
 
-  rotateAllGears: (delta) ->
+  rotateAllTurningObjects: (delta) ->
     for own id, gear of @gears
       momentum = @getMomentum(gear)
       if momentum
         angle = momentum * delta
-        @rotateGearsFrom(gear, angle, {})
+        @rotateTurningObjectsFrom(gear, angle, {})
+
+  addChainConnections: (chain) ->
+    for gearId in chain.supportingGearIds
+      if gearId in chain.innerGearIds
+        @addConnection(chain, @getGearWithId(gearId), ConnectionType.CHAIN_INSIDE)
+      else
+        @addConnection(chain, @getGearWithId(gearId), ConnectionType.CHAIN_OUTSIDE)
 
   addChain: (chain) ->
+    oldBoard = @saveBoard()
+    @chains[chain.id] = chain
+    @connections[chain.id] = {}
     if chain.tightenChain(this)
       @chains[chain.id] = chain
+      @addChainConnections(chain)
+    else
+      @restoreBoard(oldBoard)
+      return false
+    if @isBoardValid()
+      true
+    else
+      @restoreBoard(oldBoard)
+      false
 
   removeChain: (chain) ->
+    @removeAllConnections(chain)
     delete @chains[chain.id]
+    delete @connections[chain.id]
+    delete @groups[chain.id]
+    delete @levels[chain.id]
 
   getChains: ->
     @chains
+
+  getTurningObjects: ->
+    turningObjects = {}
+    turningObjects[id] = gear for own id, gear of @gears
+    turningObjects[id] = chain for own id, chain of @chains
+    turningObjects
 
 window.gearsketch.model.Board = Board
