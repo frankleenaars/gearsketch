@@ -69,9 +69,10 @@ class GearSketch
     @lastUpdateTime = new Date().getTime()
     @updateAndDraw()
     Util.tempRegisterDrawMethod(this, @draw)
-#    @board.addGear(new Gear({x: 200, y: 300}, 0, 30))
-#    @board.addGear(new Gear({x: 400, y: 300}, 0, 20))
-#    @board.addGear(new Gear({x: 600, y: 300}, 0, 30))
+#    for x in [0...3]
+#      for y in [0...3]
+#        @board.addGear(new Gear(new Point(200 + x * 120, 200 + y * 120), 0, 20))
+
 
   buttonLoaded: ->
     @loadedButtons++
@@ -462,14 +463,8 @@ class GearSketch
         ctx.lineTo(segment.end.x, segment.end.y)
         ctx.stroke()
     ctx.fillStyle = "white"
-    tmpFirst = true # TODO: REMOVE
     for point in chain.findPointsOnChain(25)
       ctx.beginPath()
-      if tmpFirst
-        ctx.fillStyle = "red"
-        tmpFirst = false
-      else
-        ctx.fillStyle = "white"
       ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI, true)
       ctx.fill()
     ctx.restore()
@@ -478,7 +473,7 @@ class GearSketch
     ctx.drawImage(@pointerImage, location.x - 0.5 * @pointerImage.width, location.y)
 
   draw: ->
-    if @canvas.getContext
+    if @canvas.getContext?
       @updateCanvasSize()
       ctx = @canvas.getContext('2d')
       ctx.clearRect(0, 0, @canvas.width, @canvas.height)
@@ -488,6 +483,8 @@ class GearSketch
       arrowsToDraw = []
       for i in [0...sortedGears.length]
         gear = sortedGears[i]
+        group = @board.getGroup(gear)
+        level = @board.getLevel(gear)
         momentum = @board.getMomentum(gear)
         if gear is @selectedGear and @goalLocationGear
           @drawGear(ctx, gear, "grey")
@@ -497,12 +494,15 @@ class GearSketch
           @drawGear(ctx, gear)
           if momentum
             arrowsToDraw.push([gear, momentum, "red"])
-        # draw arrows when all the gears in current group on current level are drawn
-        shouldDrawArrows =
+
+        # draw chains and arrows when all the gears in current group on current level are drawn
+        shouldDrawChainsAndArrows =
           (i is sortedGears.length - 1) or
           @board.getGroup(gear) isnt @board.getGroup(sortedGears[i + 1]) or
           @board.getLevel(gear) isnt @board.getLevel(sortedGears[i + 1])
-        if shouldDrawArrows
+        if shouldDrawChainsAndArrows
+          for chain in @board.getChainsInGroupOnLevel(group, level)
+            @drawChain(ctx, chain)
           for arrow in arrowsToDraw
             @drawMomentum(ctx, arrow[0], arrow[1], arrow[2])
           arrowsToDraw = []
@@ -514,10 +514,6 @@ class GearSketch
       # draw selected gear momentum
       if @selectedGear and @selectedGearMomentum
         @drawMomentum(ctx, @selectedGear, @selectedGearMomentum)
-
-      # draw chains (TODO: draw at correct level)
-      for id, chain of @board.getChains()
-        @drawChain(ctx, chain)
 
       # draw stroke
       if @stroke.length > 0

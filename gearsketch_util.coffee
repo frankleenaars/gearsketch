@@ -56,7 +56,6 @@ class Util
   @Side:
     LEFT: "left"
     RIGHT: "right"
-    ON_LINE: "on line" # TODO: REMOVE IF UNNECESSARY
 
   # http://stackoverflow.com/questions/728360/most-elegant-way-to-clone-a-javascript-object
   @clone: (obj) ->
@@ -213,9 +212,6 @@ class Util
       distance = Math.min(distance, d)
     distance
 
-  @doesChainCrossGear: (chain, gear) ->
-    @getPointPathDistance(gear.location, chain.points) < gear.pitchRadius
-
   # return gear nearest to point a that intersects line segment ab or null if no such gear exists
   # if ignoredGears is specified, these gears will never be returned
   @findNearestIntersectingGear: (gears, a, b, ignoredGearIds = {}) ->
@@ -252,19 +248,6 @@ class Util
       @Direction.CLOCKWISE
     else
       @Direction.COUNTER_CLOCKWISE
-
-  # TODO: REMOVE?
-  # get side of point p relative to line ab
-  # http://stackoverflow.com/questions/1560492/how-to-tell-wether-a-point-is-right-or-left-of-a-line
-  @getSide: (p, a, b) ->
-    side = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)
-    if side is 0
-      @Side.ON_LINE
-    else if side < 0
-      @Side.LEFT
-    else
-      @Side.RIGHT
-  # END REMOVE?
 
   # get the two tangent points on a circle with center c and radius r from a given point p
   # tangent points are only valid if |pc| > r

@@ -170,6 +170,21 @@ class Chain
   getDistanceToLineSegment: (lineSegment) ->
     Math.min.apply(null, (segment.getDistanceToSegment(lineSegment) for segment in @segments))
 
+  distanceToChain: (chain) ->
+    minDistance = Number.MAX_VALUE
+    for segment in @segments
+      for segment2 in chain.segments
+        minDistance = Math.min(minDistance, segment.getDistanceToSegment(segment2))
+    minDistance
+
+  doesChainCrossNonSupportingGears: (board) ->
+    for id, gear of board.getGears()
+      if !(id in @supportingGearIds) and !(id of @ignoredGearIds)
+        # TODO: remove +1 when distance is calculated analytically
+        if @getDistanceToPoint(gear.location) < gear.pitchRadius + Util.EPSILON + 1
+          return true
+    return false
+
   # get the incoming or outgoing tangent point on the gear in @supportingGearIds with the given gearIndex
   getPointOnSupportingGear: (gearIndex, incoming) ->
     if incoming
@@ -245,7 +260,6 @@ class Chain
     a = path[0]
     d = 0
     while d < pathLength and !supportingGear?
-      #console.log("while1")
       d += stepSize
       b = Util.findPointOnPath(path, d)
       supportingGear = Util.findNearestIntersectingGear(gears, a, b)
@@ -259,7 +273,6 @@ class Chain
     a = firstSupportingGear.location
     d = startDistance
     while d < pathLength
-      #console.log("while2")
       d += stepSize
       b = Util.findPointOnPath(path, d)
       tangentSide = @findReverseChainTangentSide(supportingGear)
@@ -275,7 +288,6 @@ class Chain
     numberOfNoops = 0
     i = 0
     while numberOfNoops < (numberOfGears = gearsList.length)
-      #console.log("while3")
       j = (i + 1) % numberOfGears
       g1 = gearsList[i]
       g2 = gearsList[j]
@@ -390,7 +402,6 @@ class Chain
     # first: update gear sequence
     i = 0
     while i < (numberOfGears = gears.length)
-      #console.log("while4")
       j = (i + 1) % numberOfGears
       k = (i + 2) % numberOfGears
       g1 = gears[i]
@@ -408,7 +419,6 @@ class Chain
         path = [tangentPointG1, intersection, tangentPointG3]
         replacementGears = @findSupportingGearsOnPath(acknowledgedGears, g1, path, 0, false)
         if g2 in replacementGears # rare bug due to floating point errors
-          console.log("it happened!")
           return false
         gears.splice.apply(gears, [j, 1].concat(replacementGears))
         @removeRepeatedGears(gears)
@@ -461,27 +471,19 @@ class Chain
               middleSegment = updatedSegments[(j + 1) % numberOfSegments]
               if (middleSegment instanceof ArcSegment) and (middleSegment.getLength() < 2 * Chain.WIDTH)
                 continue
-            console.log("chain crosses itself")
             return false
 
-    # TODO: REMOVE?
-    # fourth: check if innergears hasn't changed
-    #updatedIgnoredGearIds = @findIgnoredGearIdsInTightenedChain(board)
-    #updatedAcknowledgedGears = board.getAcknowledgedGears(updatedIgnoredGearIds)
-#    chainPolygon = @toPolygon(updatedSegments)
-#    updatedInnerGearIds =
-#      (gear.id for id, gear of acknowledgedGears when Util.isPointInsidePolygon(gear.location, chainPolygon))
-#    if !Util.areArraysEqual(@innerGearIds, updatedInnerGearIds)
-#      console.log("innerGears changed")
-#      return false
-    # END REMOVE
-
-    # fourth: update chain properties
+    # fourth: check if no supporting gears have left innergears
     updatedIgnoredGearIds = @findIgnoredGearIdsInTightenedChain(board)
     updatedAcknowledgedGears = board.getAcknowledgedGears(updatedIgnoredGearIds)
     chainPolygon = @toPolygon(updatedSegments)
     updatedInnerGearIds =
       (gear.id for id, gear of updatedAcknowledgedGears when Util.isPointInsidePolygon(gear.location, chainPolygon))
+    for gearId in @innerGearIds
+      if !(gearId in updatedInnerGearIds) and (gearId in @supportingGearIds)
+        return false
+
+    # fifth: update chain properties
     @points = updatedPoints
     @segments = updatedSegments
     @ignoredGearIds = updatedIgnoredGearIds
@@ -490,8 +492,7 @@ class Chain
     true
 
   tightenChain: (board) ->
-    # TODO:
-    # change innerGearIds to object?
+    # TODO: change innerGearIds to object?
     #@removeEmptyTriangles(board)
     #@ensureFreeFirstPoint(board)
     @ignoredGearIds = @findIgnoredGearIds(board)
@@ -514,12 +515,12 @@ class Chain
 
 window.gearsketch.model.Chain = Chain
 
-
 # ---------------------------
 # ---------- Board ----------
 # ---------------------------
 # TODO:
-# - check teeth alignments and connection rotation direction and speed instead of cycles
+# - check teeth alignments and (directed) connection ratios and speed instead of cycles
+# - only allow top level gears to be (re)moved
 
 class Board
   # -- imported constants --
@@ -668,29 +669,36 @@ class Board
     meshingNeighbors = []
     for own candidateId, candidate of @gears
       if candidate isnt gear and Util.getEdgeDistance(gear, candidate) < EPSILON
-        meshingNeighbors.push(candidate)
+        if (@groups[candidateId] isnt @groups[gear.id]) or (@levels[candidateId] is @levels[gear.id])
+          meshingNeighbors.push(candidate)
     meshingNeighbors
 
-  alignGearTeeth: (rotatingGear, meshingGear) ->
+  findRelativeAlignment: (gear1, gear2) ->
     # shorter names for readability
-    p1 = rotatingGear.location
-    r1 = rotatingGear.rotation
-    p2 = meshingGear.location
-    r2 = meshingGear.rotation
+    p1 = gear1.location
+    r1 = gear1.rotation
+    p2 = gear2.location
+    r2 = gear2.rotation
 
     # get angles of meshing point and phases at that point
     angle1 = Math.atan2(p2.y - p1.y, p2.x - p1.x)
     angle2 = angle1 + Math.PI
     shift1 = Util.mod(angle1 - r1, 2 * Math.PI)
     shift2 = Util.mod(angle2 - r2, 2 * Math.PI)
-    toothAngle1 = (2 * Math.PI ) / rotatingGear.numberOfTeeth
-    toothAngle2 = (2 * Math.PI) / meshingGear.numberOfTeeth
+    toothAngle1 = (2 * Math.PI ) / gear1.numberOfTeeth
+    toothAngle2 = (2 * Math.PI) / gear2.numberOfTeeth
     phase1 = (shift1 % toothAngle1) / toothAngle1
     phase2 = (shift2 % toothAngle2) / toothAngle2
 
-    # align teeth
+    # find (mis)alignment of gear1 relative to gear2
     phaseSum = (phase1 + phase2) % 1
-    rotatingGear.rotation = r1 + (phaseSum - 0.25) * toothAngle1
+    (phaseSum - 0.25) * toothAngle1
+
+  alignGearTeeth: (rotatingGear, meshingGear) ->
+    rotatingGear.rotation += @findRelativeAlignment(rotatingGear, meshingGear)
+
+  areMeshingGearsAligned: (gear1, gear2) ->
+    Math.abs(@findRelativeAlignment(gear1, gear2)) < EPSILON
 
   rotateTurningObjectsFrom: (turningObject, angle, rotatedTurningObjectIds) ->
     if !(turningObject.id of rotatedTurningObjectIds)
@@ -789,25 +797,76 @@ class Board
     # may include other gears besides meshingGear1 and meshingGear2
     @alignMeshingGears(gear)
 
-  isGearInGroupWithCycle: (gearId, sourceId, visitedGearIds) ->
-    if gearId of visitedGearIds
-      true
-    else
-      visitedGearIds[gearId] = true
-      connections = @connections[gearId]
-      for own connectedGearId, connectedGear of connections
-        if connectedGearId isnt sourceId
-          if @isGearInGroupWithCycle(connectedGearId, gearId, visitedGearIds)
-            return true
-      false
+#  isGearInGroupWithCycle: (gearId, sourceId, visitedGearIds) ->
+#    if gearId of visitedGearIds
+#      true
+#    else
+#      visitedGearIds[gearId] = true
+#      connections = @connections[gearId]
+#      for own connectedGearId, connectedGear of connections
+#        if connectedGearId isnt sourceId
+#          if @isGearInGroupWithCycle(connectedGearId, gearId, visitedGearIds)
+#            return true
+#      false
+#
+#  doesBoardContainCycle: ->
+#    visitedGearIds = {}
+#    for own id, gear of @gears
+#      if !(id of visitedGearIds)
+#        if @isGearInGroupWithCycle(id, -1, visitedGearIds)
+#          return true
+#    false
 
-  doesBoardContainCycle: ->
-    visitedGearIds = {}
-    for own id, gear of @gears
-      if !(id of visitedGearIds)
-        if @isGearInGroupWithCycle(id, -1, visitedGearIds)
+  doChainsCrossNonSupportingGears: ->
+    for id, chain of @chains
+      if chain.doesChainCrossNonSupportingGears(this)
+        return true
+    false
+
+  doChainsCrossEachOther: (c1, c2) ->
+    if (@groups[c1.id] isnt @groups[c2.id]) or (@levels[c1.id] is @levels[c2.id])
+      if c1.distanceToChain(c2) < Chain.WIDTH
+        return true
+    false
+
+  doesChainCrossAnyOtherChain: (chain) ->
+    for id2, chain2 of @chains
+      if chain isnt chain2
+        if @doChainsCrossEachOther(chain, chain2)
           return true
     false
+
+  doAnyChainsCrossEachOther: ->
+    chainList = (chain for own id, chain of @chains)
+    numberOfChains = chainList.length
+    if numberOfChains < 2
+      return false
+    for i in [0...numberOfChains - 1]
+      for j in [(i + 1)...numberOfChains]
+        c1 = chainList[i]
+        c2 = chainList[j]
+        if @doChainsCrossEachOther(c1, c2)
+          return true
+    false
+
+  areAllMeshingGearsAligned: ->
+    gears = @getGearList()
+    numberOfGears = gears.length
+    if numberOfGears < 2
+      return true
+    for i in [0...numberOfGears - 1]
+      for j in [(i + 1)...numberOfGears]
+        g1 = gears[i]
+        g2 = gears[j]
+        if @connections[g1.id][g2.id] is ConnectionType.MESHING
+          if !@areMeshingGearsAligned(g1, g2)
+            return false
+    true
+
+  areConnectionRatiosConsistent: ->
+    # TODO: check if connection paths between each pair of gears have the same ratio
+    # needed for checking chains as well
+    true
 
   isBoardValid: ->
     for own id1, gear1 of @gears
@@ -821,14 +880,18 @@ class Board
           maxOuterRadius = Math.max(gear1.outerRadius, gear2.outerRadius)
           combinedOuterRadius = gear1.outerRadius + gear2.outerRadius
           if axisDistance < EPSILON
-            if group1 isnt group2
+            if (group1 isnt group2) or (level1 is level2)
               return false
           else if group1 is group2 and level1 is level2 and !@connections[gear1.id][gear2.id]
             if axisDistance < combinedOuterRadius
               return false
           else if axisDistance < maxOuterRadius + AXIS_RADIUS
             return false
-    !@doesBoardContainCycle()
+    #!@doesBoardContainCycle()
+    !@doChainsCrossNonSupportingGears() and
+    !@doAnyChainsCrossEachOther() and
+    @areAllMeshingGearsAligned() and
+    @areConnectionRatiosConsistent()
 
   placeGear: (gear, location) ->
     oldBoard = @saveBoard()
@@ -853,8 +916,7 @@ class Board
     # update chains
     for own id, chain of @chains
       if chain.updateChain(this)
-        @removeAllConnections(chain)
-        @addChainConnections(chain)
+        @updateChainConnections(chain)
       else
         @restoreBoard(oldBoard)
         return false
@@ -873,8 +935,10 @@ class Board
 
   removeGearFromChains: (gear) ->
     for own id, chain of @chains
-      if !chain.removeGear(gear, this)
+      if !chain.removeGear(gear, this) or @doesChainCrossAnyOtherChain(chain)
         @removeChain(chain)
+      else
+        @updateChainConnections(chain)
 
   addGear: (gear) ->
     oldBoard = @saveBoard()
@@ -913,7 +977,6 @@ class Board
     delete @groups[gear.id]
     delete @levels[gear.id]
     @removeGearFromChains(gear)
-    # TODO: check for overlapping chains?
 
   getGearAt: (location) ->
     gear = null
@@ -944,6 +1007,10 @@ class Board
       else
         @addConnection(chain, @getGearWithId(gearId), ConnectionType.CHAIN_OUTSIDE)
 
+  updateChainConnections: (chain) ->
+    @removeAllConnections(chain)
+    @addChainConnections(chain)
+
   addChain: (chain) ->
     oldBoard = @saveBoard()
     @chains[chain.id] = chain
@@ -969,6 +1036,9 @@ class Board
 
   getChains: ->
     @chains
+
+  getChainsInGroupOnLevel: (group, level) ->
+    chain for own id, chain of @chains when (@groups[chain.id] is group) and (@levels[chain.id] is level)
 
   getTurningObjects: ->
     turningObjects = {}
