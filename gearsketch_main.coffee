@@ -39,6 +39,8 @@ class GearSketch
   MovementType =
     STRAIGHT: "straight"
     CIRCLE: "circle"
+    LEFT_HALF_CIRCLE: "leftHalfCircle"
+    RIGHT_HALF_CIRCLE: "rightHalfCircle"
 
   buttons: {}
   loadedButtons: 0
@@ -67,14 +69,15 @@ class GearSketch
     @updateCanvasSize()
     @addCanvasListeners()
     @lastUpdateTime = new Date().getTime()
-    @updateAndDraw()
+    # TODO: why is RAF slower on ipad?
+    #@updateAndDraw()
+    @updateAndDrawNoRAF()
     Util.tempRegisterDrawMethod(this, @draw)
 #    for x in [0...3]
 #      for y in [0...3]
 #        @board.addGear(new Gear(new Point(100 + x * 120, 200 + y * 120), 0, 20))
 #    @board.addGear(new Gear(new Point(600, 100), 0, 8))
 #    @board.addGear(new Gear(new Point(600, 300), 0, 8))
-
 
   buttonLoaded: ->
     @loadedButtons++
@@ -294,8 +297,7 @@ class GearSketch
   removeStrokedChains: (stroke) ->
     lineSegment = new LineSegment(stroke[0], stroke[stroke.length - 1])
     for own id, chain of @board.getChains()
-      # TODO: remove + 2 when analytical segment distance methods are implemented
-      if chain.getDistanceToLineSegment(lineSegment) < (Util.EPSILON + 2)
+      if chain.getDistanceToLineSegment(lineSegment) < Util.EPSILON
         @board.removeChain(chain)
 
   processChainStroke: ->
@@ -323,6 +325,11 @@ class GearSketch
       @update()
       @draw()
     ), 1000 / FPS)
+
+  updateAndDrawNoRAF: =>
+    @update()
+    @draw()
+    setTimeout((=> @updateAndDrawNoRAF()), 1000 / FPS)
 
   update: =>
     updateTime = new Date().getTime()
@@ -563,76 +570,136 @@ class GearSketch
       duration: 2000
     ,
       from: @getButtonCenter("gearButton")
-      to: new Point(150, 200)
+      to: new Point(300, 200)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: new Point(150, 200)
+      from: new Point(300, 200)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.CIRCLE
       radius: 100
       duration: 1500
     ,
-      from: new Point(150, 200)
-      to: new Point(350, 300)
+      from: new Point(300, 200)
+      to: new Point(500, 200)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: new Point(350, 300)
+      from: new Point(500, 200)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.CIRCLE
       radius: 40
       duration: 1000
     ,
-      from: new Point(350, 300)
-      to: new Point(350, 340)
+      from: new Point(500, 200)
+      to: new Point(500, 240)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 500
     ,
-      from: new Point(350, 340)
-      to: new Point(150, 300)
+      from: new Point(500, 240)
+      to: new Point(300, 300)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: new Point(150, 300)
-      to: new Point(400, 180)
+      from: new Point(300, 300)
+      to: new Point(100, 180)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: new Point(400, 180)
+      from: new Point(100, 180)
+      atStart: MovementAction.PEN_DOWN
+      atEnd: MovementAction.PEN_UP
+      type: MovementType.CIRCLE
+      radius: 90
+      duration: 1000
+    ,
+      from: new Point(100, 180)
+      to: new Point(100, 260)
+      atStart: MovementAction.PEN_UP
+      atEnd: MovementAction.PEN_UP
+      type: MovementType.STRAIGHT
+      duration: 500
+    ,
+      from: new Point(100, 260)
+      to: new Point(190, 260)
+      atStart: MovementAction.PEN_DOWN
+      atEnd: MovementAction.PEN_UP
+      type: MovementType.STRAIGHT
+      duration: 1500
+    ,
+      from: new Point(190, 260)
+      to: new Point(550, 220)
+      atStart: MovementAction.PEN_UP
+      atEnd: MovementAction.PEN_UP
+      type: MovementType.STRAIGHT
+      duration: 1500
+    ,
+      from: new Point(550, 220)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.CIRCLE
       radius: 80
       duration: 1000
     ,
-      from: new Point(400, 180)
-      to: new Point(400, 260)
+      from: new Point(550, 220)
+      to: @getButtonCenter("chainButton")
       atStart: MovementAction.PEN_UP
-      atEnd: MovementAction.PEN_UP
+      atEnd: MovementAction.PEN_TAP
       type: MovementType.STRAIGHT
-      duration: 500
+      duration: 1500
     ,
-      from: new Point(400, 260)
-      to: new Point(260, 260)
-      atStart: MovementAction.PEN_DOWN
+      from: @getButtonCenter("chainButton")
+      to: new Point(280, 150)
+      atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: new Point(260, 260)
+      from: new Point(280, 150)
+      atStart: MovementAction.PEN_DOWN
+      atEnd: MovementAction.PEN_DOWN
+      type: MovementType.LEFT_HALF_CIRCLE
+      radius: 140
+      duration: 1500
+      noPause: true
+    ,
+      # TODO: fix PEN_UP / PEN_DOWN
+      from: new Point(280, 430)
+      to: new Point(600, 400)
+      atStart: MovementAction.PEN_UP
+      atEnd: MovementAction.PEN_DOWN
+      type: MovementType.STRAIGHT
+      duration: 1000
+      noPause: true
+    ,
+      from: new Point(600, 400)
+      atStart: MovementAction.PEN_UP
+      atEnd: MovementAction.PEN_DOWN
+      type: MovementType.RIGHT_HALF_CIRCLE
+      radius: 110
+      duration: 1000
+      noPause: true
+    ,
+      from: new Point(600, 180)
+      to: new Point(280, 150)
+      atStart: MovementAction.PEN_UP
+      atEnd: MovementAction.PEN_UP
+      type: MovementType.STRAIGHT
+      duration: 1000
+    ,
+      from: new Point(280, 150)
       to: @getButtonCenter("momentumButton")
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_TAP
@@ -640,20 +707,20 @@ class GearSketch
       duration: 1500
     ,
       from: @getButtonCenter("momentumButton")
-      to: new Point(260, 180)
+      to: new Point(185, 180)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: new Point(260, 180)
-      to: new Point(300, 200)
+      from: new Point(185, 180)
+      to: new Point(150, 190)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: new Point(300, 200)
+      from: new Point(150, 200)
       to: @getButtonCenter("playButton")
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_TAP
@@ -668,18 +735,18 @@ class GearSketch
       duration: 3000
     ,
       from: @getButtonCenter("gearButton")
-      to: new Point(20, 350)
+      to: new Point(20, 250)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: new Point(20, 350)
-      to: new Point(400, 200)
+      from: new Point(20, 250)
+      to: new Point(650, 300)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
-      duration: 2000
+      duration: 1500
     ]
 
   getButtonCenter: (buttonName) ->
@@ -712,7 +779,7 @@ class GearSketch
         @handlePenUp()
       else if movement.atEnd is MovementAction.PEN_UP
         @handlePenUp()
-      @restTimer = 500
+      @restTimer = if movement.noPause? then 0 else 500
       @movementCompletion = 0
       @currentDemoMovement++
 
@@ -723,6 +790,14 @@ class GearSketch
     else if movement.type is MovementType.CIRCLE
       center = new Point(movement.from.x , movement.from.y + movement.radius)
       @pointerLocation = center.plus(Point.polar(Math.PI - (movementCompletion - 0.25) * 2 * Math.PI, movement.radius))
+    else if movement.type is MovementType.LEFT_HALF_CIRCLE
+      center = new Point(movement.from.x , movement.from.y + movement.radius)
+      angle = 1.5 * Math.PI - movementCompletion * Math.PI
+      @pointerLocation = center.plus(Point.polar(angle, movement.radius))
+    else if movement.type is MovementType.RIGHT_HALF_CIRCLE
+      center = new Point(movement.from.x , movement.from.y - movement.radius)
+      angle = 0.5 * Math.PI - movementCompletion * Math.PI
+      @pointerLocation = center.plus(Point.polar(angle, movement.radius))
 
   playDemo: ->
     @loadDemoMovements() # load these on each play in case canvas size changed

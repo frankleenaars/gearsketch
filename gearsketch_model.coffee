@@ -236,8 +236,7 @@ class Chain
   doesChainCrossNonSupportingGears: (board) ->
     for id, gear of board.getGears()
       if !(id in @supportingGearIds) and !(id of @ignoredGearIds)
-        # TODO: remove +1 when distance is calculated analytically
-        if @getDistanceToPoint(gear.location) < gear.pitchRadius + Util.EPSILON + 1
+        if @getDistanceToPoint(gear.location) < gear.pitchRadius + Util.EPSILON
           return true
     return false
 
