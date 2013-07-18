@@ -36,6 +36,8 @@ window.gearsketch.Point = Point
 # ---------------------------
 # ---------- Util -----------
 # ---------------------------
+# TODO: refactor line segment usage
+
 class Util
   # imports
   Point = window.gearsketch.Point
@@ -89,6 +91,9 @@ class Util
 
   @mod: (a, b) ->
     (a % b + b) % b
+
+  @sign: (x) ->
+    if x < 0 then -1 else 1
 
   @addAll: (set, elements) ->
     for element in elements
@@ -168,21 +173,22 @@ class Util
   @findGearsInsidePolygon: (polygon, gears) ->
     (gear for own id, gear of gears when @isGearInsidePolygon(gear, polygon))
 
-  # find distance between point p and line segment ab
   # http://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment
-  @getPointLineSegmentDistance: (p, a, b) ->
+  @findNearestPointOnLineSegment: (p, a, b) ->
     segmentLength = a.distance(b)
     if segmentLength is 0
-      p.distance(a)
+      a
     else
       t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (segmentLength * segmentLength)
       if t < 0
-        p.distance(a)
+        a
       else if t > 1
-        p.distance(b)
+        b
       else
-        projection = a.plus(b.minus(a).times(t))
-        p.distance(projection)
+        a.plus(b.minus(a).times(t))
+
+  @getPointLineSegmentDistance: (p, a, b) ->
+    p.distance(@findNearestPointOnLineSegment(p, a, b))
 
   @doesGearIntersectSegment: (gear, a, b) ->
     @getPointLineSegmentDistance(gear.location, a, b) < (gear.pitchRadius + Util.EPSILON)
@@ -342,6 +348,33 @@ class Util
       @findExternalTangentsOfGears(gear1, gear2)[side]
     else
       @findInternalTangentsOfGears(gear1, gear2)[side]
+
+  @findAllSimplePathsForNodes: (graph, goalNode, nodesVisited) ->
+    paths = []
+    currentNode = graph[nodesVisited[nodesVisited.length - 1]]
+    for conn, connType of currentNode
+      if !(conn in nodesVisited)
+        nv = nodesVisited.slice(0)
+        nv.push(conn)
+        if conn is goalNode
+          paths.push(nv)
+        else
+          paths = paths.concat(@findAllSimplePathsForNodes(graph, goalNode, nv))
+    return paths
+
+  @findAllSimplePathsBetweenNeighbors: (graph) ->
+    paths = []
+    nodes = Object.keys(graph)
+    if nodes.length < 2
+      return []
+    for i in [0...nodes.length - 1]
+      for j in [(i + 1)...nodes.length]
+        if graph[nodes[i]][nodes[j]]?
+          paths = paths.concat(@findAllSimplePathsForNodes(graph, nodes[j], [nodes[i]]))
+    numberOfPaths = paths.length
+    for i in [0...numberOfPaths]
+      paths.push(paths[i].slice(0).reverse())
+    paths
 
   # TEMP
   @tempRegisterDrawMethod: (object, drawFunction) ->

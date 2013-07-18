@@ -51,6 +51,15 @@ class ArcSegment
     angle = @start + (if @direction is Util.Direction.CLOCKWISE then angleToGo else -angleToGo)
     @center.plus(Point.polar(angle, @radius))
 
+  pointOnCircle: (angle) ->
+    @center.plus(Point.polar(angle, @radius))
+
+  startPoint: ->
+    @pointOnCircle(@start)
+
+  endPoint: ->
+    @pointOnCircle(@end)
+
   doesArcContainAngle: (angle) ->
     if @direction is Util.Direction.CLOCKWISE
       Util.mod(@end - @start, 2 * Math.PI) > Util.mod(angle - @start, 2 * Math.PI)
@@ -66,10 +75,57 @@ class ArcSegment
       endPoint = @center.plus(Point.polar(@end, @radius))
       Math.min(point.distance(startPoint), point.distance(endPoint))
 
-  # TODO: find distance analytically
+  intersectsLineSegment: (lineSegment) ->
+    # check if circle intersects line
+    # http://mathworld.wolfram.com/Circle-LineIntersection.html
+    p1 = lineSegment.start.minus(@center)
+    p2 = lineSegment.end.minus(@center)
+    dx = p2.x - p1.x
+    dy = p2.y - p1.y
+    dr = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2))
+    if dr is 0
+      return false
+    d = p1.x * p2.y - p2.x * p1.y
+    discriminant = Math.pow(@radius, 2) * Math.pow(dr, 2) - Math.pow(d, 2)
+    if discriminant < 0
+      false
+    else
+      i1x = (d * dy + Util.sign(dy) * dx * Math.sqrt(discriminant)) / Math.pow(dr, 2)
+      i1y = (-d * dx + Math.abs(dy) * Math.sqrt(discriminant)) / Math.pow(dr, 2)
+      i1 = new Point(i1x, i1y).plus(@center)
+      if lineSegment.getDistanceToPoint(i1) < Util.EPSILON and @getDistanceToPoint(i1) < Util.EPSILON
+        return true
+      i2x = (d * dy - Util.sign(dy) * dx * Math.sqrt(discriminant)) / Math.pow(dr, 2)
+      i2y = (-d * dx - Math.abs(dy) * Math.sqrt(discriminant)) / Math.pow(dr, 2)
+      i2 = new Point(i2x, i2y).plus(@center)
+      if lineSegment.getDistanceToPoint(i2) < Util.EPSILON and @getDistanceToPoint(i2) < Util.EPSILON
+        return true
+      false
+
+  # TODO: fix algorithms
   getDistanceToSegment: (segment) ->
-    # quick approximation: find distance to many points on segment and take the minimum
-    Math.min.apply(null, @getDistanceToPoint(segment.findPoint(d)) for d in [0...Math.ceil(segment.getLength())])
+    if segment instanceof ArcSegment
+      if @center.distance(segment.center) > Util.EPSILON
+        angle1 = Math.atan2(segment.center.y - @center.y, segment.center.x - @center.x)
+        angle2 = Util.mod(angle1 + Math.PI, 2 * Math.PI)
+        if @doesArcContainAngle(angle1) and segment.doesArcContainAngle(angle2)
+          centerDistance = @center.distance(segment.center)
+          return Math.max(0, centerDistance - @radius - segment.radius)
+      Math.min(@getDistanceToPoint(segment.startPoint())
+      , @getDistanceToPoint(segment.endPoint())
+      , segment.getDistanceToPoint(@startPoint())
+      , segment.getDistanceToPoint(@endPoint()))
+    else # segment is LineSegment
+      if @intersectsLineSegment(segment)
+        0
+      else
+        pointNearestToCenter = Util.findNearestPointOnLineSegment(@center, segment.start, segment.end)
+        Math.min(@getDistanceToPoint(pointNearestToCenter)
+        , @getDistanceToPoint(segment.start)
+        , @getDistanceToPoint(segment.end)
+        , segment.getDistanceToPoint(@startPoint())
+        , segment.getDistanceToPoint(@endPoint()))
+
 
   clone: ->
     new ArcSegment(@center.clone(), @radius, @start, @end, @direction)
@@ -205,41 +261,11 @@ class Chain
         @getPointOnSupportingGear(index, false)
         @getPointOnSupportingGear(afterIndex, true)
       ]
-      Util.tempDrawPath(path)
       replacementGears = @findSupportingGearsOnPath(acknowledgedGears, beforeGear, path, 0, false)
       gears.splice.apply(gears, [index, 1].concat(replacementGears))
       @removeRepeatedGears(gears)
       @supportingGearIds = (g.id for g in gears)
     return @updateChain(board)
-
-
-#  removeEmptyTriangles: (board) ->
-#    gears = board.getGearList()
-#    numberOfNoOps = 0
-#    i = 0
-#    while numberOfNoOps < (numberOfPoints = @points.length)
-#      i = i % numberOfPoints
-#      j = (i + 1) % numberOfPoints
-#      k = (i + 2) % numberOfPoints
-#      triangle = [@points[i], @points[j], @points[k]]
-#      if gears.some((gear) -> Util.doesGearIntersectTriangle(gear, triangle))
-#        numberOfNoOps++
-#        i++
-#      else
-#        @points.splice(j, 1)
-#        numberOfNoOps = 0
-#
-  # reorder points list if first point is inside a gear
-#  ensureFreeFirstPoint: (board) ->
-#    freePointIndex = 0
-#    numberOfPoints = @points.length
-#    for i in [0...numberOfPoints]
-#      if board.getGearAt(@points[i]) is null
-#        freePointIndex = i
-#        break
-#    if freePointIndex isnt 0 and i isnt numberOfPoints
-#      newFirstPoints = @points.splice(freePointIndex, numberOfPoints - freePointIndex)
-#      @points = newFirstPoints.concat(@points)
 
   findChainTangentSide: (gear) ->
     if (@direction is Util.Direction.CLOCKWISE) is (gear.id in @innerGearIds)
@@ -493,8 +519,6 @@ class Chain
 
   tightenChain: (board) ->
     # TODO: change innerGearIds to object?
-    #@removeEmptyTriangles(board)
-    #@ensureFreeFirstPoint(board)
     @ignoredGearIds = @findIgnoredGearIds(board)
     acknowledgedGears = board.getAcknowledgedGears(@ignoredGearIds)
     @innerGearIds = (gear.id for gear in Util.findGearsInsidePolygon(@points, acknowledgedGears))
@@ -519,7 +543,6 @@ window.gearsketch.model.Chain = Chain
 # ---------- Board ----------
 # ---------------------------
 # TODO:
-# - check teeth alignments and (directed) connection ratios and speed instead of cycles
 # - only allow top level gears to be (re)moved
 
 class Board
@@ -700,6 +723,7 @@ class Board
   areMeshingGearsAligned: (gear1, gear2) ->
     Math.abs(@findRelativeAlignment(gear1, gear2)) < EPSILON
 
+  # TODO: use calculateRatio
   rotateTurningObjectsFrom: (turningObject, angle, rotatedTurningObjectIds) ->
     if !(turningObject.id of rotatedTurningObjectIds)
       turningObject.rotation = Util.mod(turningObject.rotation + angle, 2 * Math.PI)
@@ -797,26 +821,6 @@ class Board
     # may include other gears besides meshingGear1 and meshingGear2
     @alignMeshingGears(gear)
 
-#  isGearInGroupWithCycle: (gearId, sourceId, visitedGearIds) ->
-#    if gearId of visitedGearIds
-#      true
-#    else
-#      visitedGearIds[gearId] = true
-#      connections = @connections[gearId]
-#      for own connectedGearId, connectedGear of connections
-#        if connectedGearId isnt sourceId
-#          if @isGearInGroupWithCycle(connectedGearId, gearId, visitedGearIds)
-#            return true
-#      false
-#
-#  doesBoardContainCycle: ->
-#    visitedGearIds = {}
-#    for own id, gear of @gears
-#      if !(id of visitedGearIds)
-#        if @isGearInGroupWithCycle(id, -1, visitedGearIds)
-#          return true
-#    false
-
   doChainsCrossNonSupportingGears: ->
     for id, chain of @chains
       if chain.doesChainCrossNonSupportingGears(this)
@@ -863,9 +867,36 @@ class Board
             return false
     true
 
+  calculateRatio: (turningObject1, turningObject2, connectionType) ->
+    if connectionType is ConnectionType.AXIS
+      1
+    else if (connectionType is ConnectionType.MESHING) or (connectionType is ConnectionType.CHAIN_OUTSIDE)
+      -turningObject1.getCircumference() / turningObject2.getCircumference()
+    else # gear inside chain
+      turningObject1.getCircumference() / turningObject2.getCircumference()
+
+  calculatePathRatio: (path, turningObjects) ->
+    ratio = 1
+    pathLength = path.length
+    for i in [0...pathLength - 1]
+      turningObject1 = turningObjects[path[i]]
+      turningObject2 = turningObjects[path[i + 1]]
+      connectionType = @connections[turningObject1.id][turningObject2.id]
+      ratio *= @calculateRatio(turningObject1, turningObject2, connectionType)
+    ratio
+
   areConnectionRatiosConsistent: ->
-    # TODO: check if connection paths between each pair of gears have the same ratio
-    # needed for checking chains as well
+    turningObjects = @getTurningObjects()
+    ratios = {}
+    paths = Util.findAllSimplePathsBetweenNeighbors(@connections)
+    for path in paths
+      pathName = "#{path[0]}-#{path[path.length - 1]}"
+      ratio = @calculatePathRatio(path, turningObjects)
+      if !ratios[pathName]?
+        ratios[pathName] = ratio
+      else
+        if Math.abs(ratios[pathName] - ratio) > EPSILON
+          return false
     true
 
   isBoardValid: ->

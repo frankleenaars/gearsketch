@@ -71,7 +71,9 @@ class GearSketch
     Util.tempRegisterDrawMethod(this, @draw)
 #    for x in [0...3]
 #      for y in [0...3]
-#        @board.addGear(new Gear(new Point(200 + x * 120, 200 + y * 120), 0, 20))
+#        @board.addGear(new Gear(new Point(100 + x * 120, 200 + y * 120), 0, 20))
+#    @board.addGear(new Gear(new Point(600, 100), 0, 8))
+#    @board.addGear(new Gear(new Point(600, 300), 0, 8))
 
 
   buttonLoaded: ->
@@ -448,7 +450,6 @@ class GearSketch
     ctx.save()
     ctx.lineWidth = Chain.WIDTH
     ctx.lineCap = "round"
-    #ctx.strokeStyle = "rgba(0, 0, 255, 0.8)"
     ctx.strokeStyle = "rgb(0, 0, 255)"
     ctx.moveTo(chain.segments[0].start.x, chain.segments[0].start.y)
     for segment in chain.segments
