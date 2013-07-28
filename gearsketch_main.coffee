@@ -90,7 +90,7 @@ class GearSketch
       button = new Image()
       button.name = name
       button.onload = => @buttonLoaded()
-      button.src = file
+      button.src = "img/" + file
       button.location = new Point(x, y)
       button.padding = 3
       @buttons[name] = button
@@ -99,7 +99,7 @@ class GearSketch
   loadDemoPointer: ->
     image = new Image()
     image.onload = => @pointerImage = image
-    image.src = "hand.png"
+    image.src = "img/hand.png"
 
   # Input callback methods
   addCanvasListeners: ->
