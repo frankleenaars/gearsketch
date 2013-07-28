@@ -633,13 +633,13 @@ class GearSketch
       duration: 500
     ,
       from: new Point(100, 260)
-      to: new Point(190, 260)
+      to: new Point(180, 260)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: new Point(190, 260)
+      from: new Point(180, 260)
       to: new Point(550, 220)
       atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
