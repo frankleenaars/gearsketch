@@ -2,6 +2,10 @@
 # University of Twente - Department of Instructional Technology
 "use strict"
 
+# TODO:
+# - clean up 'for in [0...length]' loops (length is never updated)
+# - clean up get / find names
+
 # imports
 Point = window.gearsketch.Point
 Util = window.gearsketch.Util

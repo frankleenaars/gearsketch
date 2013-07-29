@@ -349,30 +349,30 @@ class Util
     else
       @findInternalTangentsOfGears(gear1, gear2)[side]
 
-  @findAllSimplePathsForNodes: (graph, goalNode, nodesVisited) ->
+  @findAllSimplePathsForNodes: (turningObjects, goalNode, nodesVisited) ->
     paths = []
-    currentNode = graph[nodesVisited[nodesVisited.length - 1]]
-    for conn, connType of currentNode
-      if !(conn in nodesVisited)
+    currentNode = nodesVisited[nodesVisited.length - 1]
+    for own neighborId of currentNode.connections
+      neighbor = turningObjects[neighborId]
+      unless neighbor in nodesVisited
         nv = nodesVisited.slice(0)
-        nv.push(conn)
-        if conn is goalNode
+        nv.push(neighbor)
+        if neighbor is goalNode
           paths.push(nv)
         else
-          paths = paths.concat(@findAllSimplePathsForNodes(graph, goalNode, nv))
+          paths = paths.concat(@findAllSimplePathsForNodes(turningObjects, goalNode, nv))
     return paths
 
-  @findAllSimplePathsBetweenNeighbors: (graph) ->
+  @findAllSimplePathsBetweenNeighbors: (turningObjects) ->
     paths = []
-    nodes = Object.keys(graph)
+    nodes = turningObject for own id, turningObject of turningObjects
     if nodes.length < 2
       return []
     for i in [0...nodes.length - 1]
       for j in [(i + 1)...nodes.length]
-        if graph[nodes[i]][nodes[j]]?
-          paths = paths.concat(@findAllSimplePathsForNodes(graph, nodes[j], [nodes[i]]))
-    numberOfPaths = paths.length
-    for i in [0...numberOfPaths]
+        if nodes[i].connections(nodes[j].id)?
+          paths = paths.concat(@findAllSimplePathsForNodes(turningObjects, nodes[j], [nodes[i]]))
+    for i in [0...paths.length]
       paths.push(paths[i].slice(0).reverse())
     paths
 

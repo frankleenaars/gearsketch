@@ -38,7 +38,8 @@ class Gear
     @connections = gear.connections
 
   clone: ->
-    new Gear(@location.clone(), @rotation, @numberOfTeeth, @id, @momentum, @group, @level, @connections)
+    new Gear(@location.clone(), @rotation, @numberOfTeeth, @id,
+      @momentum, @group, @level, Util.clone(@connections))
 
 window.gearsketch.model.Gear = Gear
 
@@ -538,7 +539,7 @@ class Chain
     @updateChain(board)
 
   clone: ->
-    copy = new Chain(@points, @id, @group, @level)
+    copy = new Chain(@points, @id, @group, @level, Util.clone(@connections))
     copy.segments = Util.clone(@segments)
     copy.ignoredGearIds = Util.clone(@ignoredGearIds)
     copy.innerGearIds = Util.clone(@innerGearIds)
@@ -571,30 +572,24 @@ class Board
     CHAIN_OUTSIDE: "chain_outside"
 
   gears: {}
-  connections: {}
   chains: {}
 
   # TODO: should probably add board.clone() method and/or use constructor
   saveBoard: ->
     gears: Util.clone(@gears)
-    connections: Util.clone(@connections)
     chains: Util.clone(@chains)
 
   restoreBoard: (board) ->
     for own id, gear of @gears
       gear.restore(board.gears[id])
-    @connections = board.connections
     @chains = board.chains
 
   restoreBoardAfterDemo: (board) ->
     @gears = board.gears
-    @connections = board.connections
     @chains = board.chains
 
   clearBoard: ->
     @gears = {}
-    @connections = {}
-    @momenta = {}
     @chains = {}
 
   getNextGroup: ->
@@ -628,11 +623,11 @@ class Board
     (gearWithLevelScore[0] for gearWithLevelScore in gearsWithLevelScore)
 
   removeConnection: (turningObject1, turningObject2) ->
-    delete @connections[turningObject1.id][turningObject2.id]
-    delete @connections[turningObject2.id][turningObject1.id]
+    delete turningObject1.connections[turningObject2.id]
+    delete turningObject2.connections[turningObject1.id]
 
   removeAllConnections: (turningObject) ->
-    for own neighborId, connectionType of @connections[turningObject.id]
+    for own neighborId, connectionType of turningObject.connections
       neighbor = @getTurningObjects()[neighborId]
       @removeConnection(turningObject, neighbor)
     @updateGroupsAndLevels()
@@ -652,9 +647,10 @@ class Board
     nearestAxis
 
   updateGroupsAndLevelsFrom: (turningObjectId, group, level, updatedGroups, updatedLevels) ->
+    turningObject = @getTurningObjects()[turningObjectId]
     updatedGroups[turningObjectId] = group
     updatedLevels[turningObjectId] = level
-    connections = @connections[turningObjectId]
+    connections = turningObject.connections
     sameLevelConnectionTypes = [ConnectionType.MESHING, ConnectionType.CHAIN_INSIDE, ConnectionType.CHAIN_OUTSIDE]
     for own neighborId, connectionType of connections
       if !(neighborId of updatedGroups)
@@ -682,8 +678,8 @@ class Board
     null
 
   addConnection: (turningObject1, turningObject2, connectionType) ->
-    @connections[turningObject1.id][turningObject2.id] = connectionType
-    @connections[turningObject2.id][turningObject1.id] = connectionType
+    turningObject1.connections[turningObject2.id] = connectionType
+    turningObject2.connections[turningObject1.id] = connectionType
     @updateGroupsAndLevels()
 
   findMeshingNeighbors: (gear) ->
@@ -727,8 +723,7 @@ class Board
       turningObject.rotation = Util.mod(turningObject.rotation + angle, 2 * Math.PI)
       rotatedTurningObjectIds[turningObject.id] = true
 
-    connections = @connections[turningObject.id]
-    for own neighborId, connectionType of connections
+    for own neighborId, connectionType of turningObject.connections
       neighbor = @getTurningObjects()[neighborId]
       if !(neighborId of rotatedTurningObjectIds)
         if connectionType is ConnectionType.AXIS
@@ -860,7 +855,7 @@ class Board
       for j in [(i + 1)...numberOfGears]
         g1 = gears[i]
         g2 = gears[j]
-        if @connections[g1.id][g2.id] is ConnectionType.MESHING
+        if g1.connections[g2.id] is ConnectionType.MESHING
           if !@areMeshingGearsAligned(g1, g2)
             return false
     true
@@ -873,23 +868,22 @@ class Board
     else # gear inside chain
       turningObject1.getCircumference() / turningObject2.getCircumference()
 
-  calculatePathRatio: (path, turningObjects) ->
+  calculatePathRatio: (path) ->
     ratio = 1
     pathLength = path.length
     for i in [0...pathLength - 1]
-      turningObject1 = turningObjects[path[i]]
-      turningObject2 = turningObjects[path[i + 1]]
-      connectionType = @connections[turningObject1.id][turningObject2.id]
+      turningObject1 = path[i]
+      turningObject2 = path[i + 1]
+      connectionType = turningObject1.connections[turningObject2.id]
       ratio *= @calculateRatio(turningObject1, turningObject2, connectionType)
     ratio
 
   areConnectionRatiosConsistent: ->
-    turningObjects = @getTurningObjects()
     ratios = {}
-    paths = Util.findAllSimplePathsBetweenNeighbors(@connections)
+    paths = Util.findAllSimplePathsBetweenNeighbors(@getTurningObjects())
     for path in paths
-      pathName = "#{path[0]}-#{path[path.length - 1]}"
-      ratio = @calculatePathRatio(path, turningObjects)
+      pathName = "#{path[0].id}-#{path[path.length - 1].id}"
+      ratio = @calculatePathRatio(path)
       if !ratios[pathName]?
         ratios[pathName] = ratio
       else
@@ -911,7 +905,7 @@ class Board
           if axisDistance < EPSILON
             if (group1 isnt group2) or (level1 is level2)
               return false
-          else if group1 is group2 and level1 is level2 and !@connections[gear1.id][gear2.id]
+          else if group1 is group2 and level1 is level2 and !gear1.connections[gear2.id]?
             if axisDistance < combinedOuterRadius
               return false
           else if axisDistance < maxOuterRadius + AXIS_RADIUS
@@ -972,7 +966,6 @@ class Board
     oldBoard = @saveBoard()
     gear.group = @getNextGroup()
     @gears[gear.id] = gear
-    @connections[gear.id] = {}
     @addGearToChains(gear)
     if !@placeGear(gear, gear.location)
       @removeGear(gear)
@@ -984,7 +977,6 @@ class Board
   removeGear: (gear) ->
     @removeAllConnections(gear)
     delete @gears[gear.id]
-    delete @connections[gear.id]
     @removeGearFromChains(gear)
 
   getGearAt: (location) ->
@@ -1022,7 +1014,6 @@ class Board
   addChain: (chain) ->
     oldBoard = @saveBoard()
     @chains[chain.id] = chain
-    @connections[chain.id] = {}
     if chain.tightenChain(this)
       @chains[chain.id] = chain
       @addChainConnections(chain)
@@ -1038,7 +1029,6 @@ class Board
   removeChain: (chain) ->
     @removeAllConnections(chain)
     delete @chains[chain.id]
-    delete @connections[chain.id]
 
   getChains: ->
     @chains
