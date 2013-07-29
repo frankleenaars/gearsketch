@@ -469,7 +469,8 @@ class GearSketch
       if segment instanceof ArcSegment
         isCounterClockwise = (segment.direction is Util.Direction.COUNTER_CLOCKWISE)
         ctx.beginPath()
-        ctx.arc(segment.center.x, segment.center.y, segment.radius, segment.start, segment.end, isCounterClockwise)
+        ctx.arc(segment.center.x, segment.center.y, segment.radius,
+          segment.startAngle, segment.endAngle, isCounterClockwise)
         ctx.stroke()
       else
         ctx.beginPath()

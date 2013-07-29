@@ -36,45 +36,40 @@ window.gearsketch.Point = Point
 # ---------------------------
 # ------- ArcSegment --------
 # ---------------------------
-# TODO: for consistency with LineSegment @start & @end should be points, old ones called @startAngle, @endAngle
+# Note: ArcSegment should be considered immutable, because @start and @end are
+# calculated on construction, but not updated on change
 class ArcSegment
-  constructor: (@center, @radius, @start, @end, @direction) ->
+  constructor: (@center, @radius, @startAngle, @endAngle, @direction) ->
+    @start = @pointOnCircle(startAngle)
+    @end = @pointOnCircle(endAngle)
 
   getLength: ->
     angle = if @direction is Util.Direction.CLOCKWISE
-      Util.mod(@end - @start, 2 * Math.PI)
+      Util.mod(@endAngle - @startAngle, 2 * Math.PI)
     else
-      Util.mod(@start - @end, 2 * Math.PI)
+      Util.mod(@startAngle - @endAngle, 2 * Math.PI)
     angle * @radius
 
   findPoint: (distanceToGo) ->
     angleToGo = distanceToGo / @radius
-    angle = @start + (if @direction is Util.Direction.CLOCKWISE then angleToGo else -angleToGo)
+    angle = @startAngle + (if @direction is Util.Direction.CLOCKWISE then angleToGo else -angleToGo)
     @center.plus(Point.polar(angle, @radius))
 
   pointOnCircle: (angle) ->
     @center.plus(Point.polar(angle, @radius))
 
-  startPoint: ->
-    @pointOnCircle(@start)
-
-  endPoint: ->
-    @pointOnCircle(@end)
-
   doesArcContainAngle: (angle) ->
     if @direction is Util.Direction.CLOCKWISE
-      Util.mod(@end - @start, 2 * Math.PI) > Util.mod(angle - @start, 2 * Math.PI)
+      Util.mod(@endAngle - @startAngle, 2 * Math.PI) > Util.mod(angle - @startAngle, 2 * Math.PI)
     else
-      Util.mod(@start - @end, 2 * Math.PI) > Util.mod(@start - angle, 2 * Math.PI)
+      Util.mod(@startAngle - @endAngle, 2 * Math.PI) > Util.mod(@startAngle - angle, 2 * Math.PI)
 
   getDistanceToPoint: (point) ->
     angle = Math.atan2(point.y - @center.y, point.x - @center.x)
     if @doesArcContainAngle(angle)
       Math.abs(point.distance(@center) - @radius)
     else
-      startPoint = @center.plus(Point.polar(@start, @radius))
-      endPoint = @center.plus(Point.polar(@end, @radius))
-      Math.min(point.distance(startPoint), point.distance(endPoint))
+      Math.min(point.distance(@start), point.distance(@end))
 
   intersectsLineSegment: (lineSegment) ->
     # check if circle intersects line
@@ -112,10 +107,10 @@ class ArcSegment
         if @doesArcContainAngle(angle1) and segment.doesArcContainAngle(angle2)
           centerDistance = @center.distance(segment.center)
           return Math.max(0, centerDistance - @radius - segment.radius)
-      Math.min(@getDistanceToPoint(segment.startPoint())
-      , @getDistanceToPoint(segment.endPoint())
-      , segment.getDistanceToPoint(@startPoint())
-      , segment.getDistanceToPoint(@endPoint()))
+      Math.min(@getDistanceToPoint(segment.start)
+      , @getDistanceToPoint(segment.end)
+      , segment.getDistanceToPoint(@start)
+      , segment.getDistanceToPoint(@end))
     else # segment is LineSegment
       if @intersectsLineSegment(segment)
         0
@@ -124,12 +119,12 @@ class ArcSegment
         Math.min(@getDistanceToPoint(pointNearestToCenter)
         , @getDistanceToPoint(segment.start)
         , @getDistanceToPoint(segment.end)
-        , segment.getDistanceToPoint(@startPoint())
-        , segment.getDistanceToPoint(@endPoint()))
+        , segment.getDistanceToPoint(@start)
+        , segment.getDistanceToPoint(@end))
 
 
   clone: ->
-    new ArcSegment(@center.clone(), @radius, @start, @end, @direction)
+    new ArcSegment(@center.clone(), @radius, @startAngle, @endAngle, @direction)
 
 window.gearsketch.ArcSegment = ArcSegment
 
