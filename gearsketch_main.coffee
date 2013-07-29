@@ -5,13 +5,14 @@
 # TODO:
 # - clean up 'for in [0...length]' loops (length is never updated)
 # - clean up get / find names
+# - prevent gear axis cross chain? (if gear on higher level, lower level is no problem)
 
 # imports
 Point = window.gearsketch.Point
+ArcSegment = window.gearsketch.ArcSegment
+LineSegment = window.gearsketch.LineSegment
 Util = window.gearsketch.Util
 Gear = window.gearsketch.model.Gear
-ArcSegment = window.gearsketch.model.ArcSegment
-LineSegment = window.gearsketch.model.LineSegment
 Chain = window.gearsketch.model.Chain
 Board = window.gearsketch.model.Board
 

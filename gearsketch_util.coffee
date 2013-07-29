@@ -34,6 +34,138 @@ class Point
 window.gearsketch.Point = Point
 
 # ---------------------------
+# ------- ArcSegment --------
+# ---------------------------
+class ArcSegment
+  constructor: (@center, @radius, @start, @end, @direction) ->
+
+  getLength: ->
+    angle = if @direction is Util.Direction.CLOCKWISE
+      Util.mod(@end - @start, 2 * Math.PI)
+    else
+      Util.mod(@start - @end, 2 * Math.PI)
+    angle * @radius
+
+  findPoint: (distanceToGo) ->
+    angleToGo = distanceToGo / @radius
+    angle = @start + (if @direction is Util.Direction.CLOCKWISE then angleToGo else -angleToGo)
+    @center.plus(Point.polar(angle, @radius))
+
+  pointOnCircle: (angle) ->
+    @center.plus(Point.polar(angle, @radius))
+
+  startPoint: ->
+    @pointOnCircle(@start)
+
+  endPoint: ->
+    @pointOnCircle(@end)
+
+  doesArcContainAngle: (angle) ->
+    if @direction is Util.Direction.CLOCKWISE
+      Util.mod(@end - @start, 2 * Math.PI) > Util.mod(angle - @start, 2 * Math.PI)
+    else
+      Util.mod(@start - @end, 2 * Math.PI) > Util.mod(@start - angle, 2 * Math.PI)
+
+  getDistanceToPoint: (point) ->
+    angle = Math.atan2(point.y - @center.y, point.x - @center.x)
+    if @doesArcContainAngle(angle)
+      Math.abs(point.distance(@center) - @radius)
+    else
+      startPoint = @center.plus(Point.polar(@start, @radius))
+      endPoint = @center.plus(Point.polar(@end, @radius))
+      Math.min(point.distance(startPoint), point.distance(endPoint))
+
+  intersectsLineSegment: (lineSegment) ->
+    # check if circle intersects line
+    # http://mathworld.wolfram.com/Circle-LineIntersection.html
+    p1 = lineSegment.start.minus(@center)
+    p2 = lineSegment.end.minus(@center)
+    dx = p2.x - p1.x
+    dy = p2.y - p1.y
+    dr = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2))
+    if dr is 0
+      return false
+    d = p1.x * p2.y - p2.x * p1.y
+    discriminant = Math.pow(@radius, 2) * Math.pow(dr, 2) - Math.pow(d, 2)
+    if discriminant < 0
+      false
+    else
+      i1x = (d * dy + Util.sign(dy) * dx * Math.sqrt(discriminant)) / Math.pow(dr, 2)
+      i1y = (-d * dx + Math.abs(dy) * Math.sqrt(discriminant)) / Math.pow(dr, 2)
+      i1 = new Point(i1x, i1y).plus(@center)
+      if lineSegment.getDistanceToPoint(i1) < Util.EPSILON and @getDistanceToPoint(i1) < Util.EPSILON
+        return true
+      i2x = (d * dy - Util.sign(dy) * dx * Math.sqrt(discriminant)) / Math.pow(dr, 2)
+      i2y = (-d * dx - Math.abs(dy) * Math.sqrt(discriminant)) / Math.pow(dr, 2)
+      i2 = new Point(i2x, i2y).plus(@center)
+      if lineSegment.getDistanceToPoint(i2) < Util.EPSILON and @getDistanceToPoint(i2) < Util.EPSILON
+        return true
+      false
+
+  # TODO: fix algorithms
+  getDistanceToSegment: (segment) ->
+    if segment instanceof ArcSegment
+      if @center.distance(segment.center) > Util.EPSILON
+        angle1 = Math.atan2(segment.center.y - @center.y, segment.center.x - @center.x)
+        angle2 = Util.mod(angle1 + Math.PI, 2 * Math.PI)
+        if @doesArcContainAngle(angle1) and segment.doesArcContainAngle(angle2)
+          centerDistance = @center.distance(segment.center)
+          return Math.max(0, centerDistance - @radius - segment.radius)
+      Math.min(@getDistanceToPoint(segment.startPoint())
+      , @getDistanceToPoint(segment.endPoint())
+      , segment.getDistanceToPoint(@startPoint())
+      , segment.getDistanceToPoint(@endPoint()))
+    else # segment is LineSegment
+      if @intersectsLineSegment(segment)
+        0
+      else
+        pointNearestToCenter = Util.findNearestPointOnLineSegment(@center, segment.start, segment.end)
+        Math.min(@getDistanceToPoint(pointNearestToCenter)
+        , @getDistanceToPoint(segment.start)
+        , @getDistanceToPoint(segment.end)
+        , segment.getDistanceToPoint(@startPoint())
+        , segment.getDistanceToPoint(@endPoint()))
+
+
+  clone: ->
+    new ArcSegment(@center.clone(), @radius, @start, @end, @direction)
+
+window.gearsketch.ArcSegment = ArcSegment
+
+# ---------------------------
+# ------- LineSegment -------
+# ---------------------------
+class LineSegment
+  constructor: (@start, @end) ->
+
+  getLength: ->
+    @start.distance(@end)
+
+  findPoint: (distanceToGo) ->
+    Util.getPointOnLineSegment(@start, @end, distanceToGo)
+
+  getDistanceToPoint: (point) ->
+    Util.getPointLineSegmentDistance(point, @start, @end)
+
+  getDistanceToSegment: (segment) ->
+    if segment instanceof LineSegment
+      if Util.findLineSegmentIntersection([@start, @end], [segment.start, segment.end])
+        0
+      else
+        Math.min(
+          Util.getPointLineSegmentDistance(@start, segment.start, segment.end)
+        , Util.getPointLineSegmentDistance(@end, segment.start, segment.end)
+        , Util.getPointLineSegmentDistance(segment.start, @start, @end)
+        , Util.getPointLineSegmentDistance(segment.end, @start, @end))
+    else # segment is ArcSegment
+      segment.getDistanceToSegment(this)
+
+  clone: ->
+    new LineSegment(@start.clone(), @end.clone())
+
+window.gearsketch.LineSegment = LineSegment
+
+# ---------------------------
 # ---------- Util -----------
 # ---------------------------
 # TODO: refactor line segment usage
@@ -365,12 +497,12 @@ class Util
 
   @findAllSimplePathsBetweenNeighbors: (turningObjects) ->
     paths = []
-    nodes = turningObject for own id, turningObject of turningObjects
+    nodes = (turningObject for own id, turningObject of turningObjects)
     if nodes.length < 2
       return []
     for i in [0...nodes.length - 1]
       for j in [(i + 1)...nodes.length]
-        if nodes[i].connections(nodes[j].id)?
+        if nodes[i].connections[nodes[j].id]?
           paths = paths.concat(@findAllSimplePathsForNodes(turningObjects, nodes[j], [nodes[i]]))
     for i in [0...paths.length]
       paths.push(paths[i].slice(0).reverse())
