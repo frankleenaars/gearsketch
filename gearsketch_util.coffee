@@ -449,12 +449,12 @@ class Util
     @findInternalTangents([gear1.location, gear2.location], [gear1.pitchRadius, gear2.pitchRadius])
 
   @findTangentLine: (gear1, gear2, innerGearIds, direction) ->
-    gear1isInnerGear = (gear1.id in innerGearIds)
+    gear1isInnerGear = (gear1.id of innerGearIds)
     if gear1isInnerGear is (direction is @Direction.CLOCKWISE)
       side = @Side.LEFT
     else
       side = @Side.RIGHT
-    if gear1isInnerGear is (gear2.id in innerGearIds)
+    if gear1isInnerGear is (gear2.id of innerGearIds)
       @findExternalTangentsOfGears(gear1, gear2)[side]
     else
       @findInternalTangentsOfGears(gear1, gear2)[side]

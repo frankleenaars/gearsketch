@@ -140,10 +140,10 @@ class Chain
       gears.splice.apply(gears, [index, 1].concat(replacementGears))
       @removeRepeatedGears(gears)
       @supportingGearIds = (g.id for g in gears)
-    return @updateChain(board)
+    return @update(board)
 
   findChainTangentSide: (gear) ->
-    if (@direction is Util.Direction.CLOCKWISE) is (gear.id in @innerGearIds)
+    if (@direction is Util.Direction.CLOCKWISE) is (gear.id of @innerGearIds)
       Util.Side.LEFT
     else
       Util.Side.RIGHT
@@ -291,7 +291,7 @@ class Chain
         polygon.push(segment.findPoint(0.5 * segment.getLength()))
     polygon
 
-  updateChain: (board, gears = board.getGearsWithIds(@supportingGearIds)) ->
+  update: (board, gears = board.getGearsWithIds(@supportingGearIds)) ->
     if gears.length < 2
       return false
 
@@ -324,7 +324,7 @@ class Chain
           return false
         gears.splice.apply(gears, [j, 1].concat(replacementGears))
         @removeRepeatedGears(gears)
-        return @updateChain(board, gears) # start over
+        return @update(board, gears) # start over
       gear = Util.findNearestIntersectingGear(acknowledgedGears, lineSegment1, Util.makeSet(g1.id, g2.id))
       if gear?
         gears.splice(j, 0, gear)
@@ -349,7 +349,7 @@ class Chain
       lineSegment = new LineSegment(p0, p1)
       arcStart = Math.atan2(p1.y - gear.location.y, p1.x - gear.location.x)
       arcEnd = Math.atan2(p2.y - gear.location.y, p2.x - gear.location.x)
-      direction = if (@direction is Util.Direction.CLOCKWISE) is (gear.id in @innerGearIds)
+      direction = if (@direction is Util.Direction.CLOCKWISE) is (gear.id of @innerGearIds)
         Util.Direction.CLOCKWISE
       else
         Util.Direction.COUNTER_CLOCKWISE
@@ -379,10 +379,11 @@ class Chain
     updatedIgnoredGearIds = @findIgnoredGearIdsInTightenedChain(board)
     updatedAcknowledgedGears = board.getAcknowledgedGears(updatedIgnoredGearIds)
     chainPolygon = @toPolygon(updatedSegments)
-    updatedInnerGearIds =
-      (gear.id for id, gear of updatedAcknowledgedGears when Util.isPointInsidePolygon(gear.location, chainPolygon))
-    for gearId in @innerGearIds
-      if !(gearId in updatedInnerGearIds) and (gearId in @supportingGearIds)
+    updatedInnerGearIds = {}
+    for own id, gear of updatedAcknowledgedGears when Util.isPointInsidePolygon(gear.location, chainPolygon)
+      updatedInnerGearIds[id] = true
+    for gearId of @innerGearIds
+      if !(gearId of updatedInnerGearIds) and (gearId in @supportingGearIds)
         return false
 
     # fifth: update chain properties
@@ -393,16 +394,16 @@ class Chain
     @supportingGearIds = (gear.id for gear in gears)
     true
 
-  tightenChain: (board) ->
-    # TODO: change innerGearIds to object?
+  tighten: (board) ->
     @ignoredGearIds = @findIgnoredGearIds(board)
     acknowledgedGears = board.getAcknowledgedGears(@ignoredGearIds)
-    @innerGearIds = (gear.id for gear in Util.findGearsInsidePolygon(@points, acknowledgedGears))
-    if @innerGearIds.length < 2
+    @innerGearIds = {}
+    @innerGearIds[gear.id] = true for gear in Util.findGearsInsidePolygon(@points, acknowledgedGears)
+    if Object.keys(@innerGearIds).length < 2
       return false
     @direction = Util.findDirection(@points)
     @supportingGearIds = @findSupportingGearIds(acknowledgedGears)
-    @updateChain(board)
+    @update(board)
 
   clone: ->
     copy = new Chain(@points, @id, @group, @level, Util.clone(@connections))
@@ -420,7 +421,6 @@ window.gearsketch.model.Chain = Chain
 # ---------------------------
 # TODO:
 # - only allow top level gears to be (re)moved
-# - push info about gears and chains (momentum, connections, group, level) to their classes
 
 class Board
   # -- imported constants --
@@ -794,7 +794,7 @@ class Board
 
     # update chains
     for own id, chain of @chains
-      if chain.updateChain(this)
+      if chain.update(this)
         @updateChainConnections(chain)
       else
         @restoreBoard(oldBoard)
@@ -810,7 +810,7 @@ class Board
   addGearToChains: (gear) ->
     for own id, chain of @chains
       if Util.isPointInsidePolygon(gear.location, chain.toPolygon())
-        chain.innerGearIds.push(gear.id)
+        chain.innerGearIds[gear.id] = true
 
   removeGearFromChains: (gear) ->
     for own id, chain of @chains
@@ -859,7 +859,7 @@ class Board
 
   addChainConnections: (chain) ->
     for gearId in chain.supportingGearIds
-      if gearId in chain.innerGearIds
+      if gearId of chain.innerGearIds
         @addConnection(chain, @getGearWithId(gearId), ConnectionType.CHAIN_INSIDE)
       else
         @addConnection(chain, @getGearWithId(gearId), ConnectionType.CHAIN_OUTSIDE)
@@ -871,7 +871,7 @@ class Board
   addChain: (chain) ->
     oldBoard = @saveBoard()
     @chains[chain.id] = chain
-    if chain.tightenChain(this)
+    if chain.tighten(this)
       @chains[chain.id] = chain
       @addChainConnections(chain)
     else

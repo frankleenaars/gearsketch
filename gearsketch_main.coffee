@@ -7,6 +7,7 @@
 # - clean up 'for in [0...length]' loops (length is never updated)
 # - clean up get / find names
 # - prevent gear axis cross chain? (if gear on higher level, lower level is no problem)
+# - use for _own_ of ... consistently
 
 # imports
 Point = window.gearsketch.Point
