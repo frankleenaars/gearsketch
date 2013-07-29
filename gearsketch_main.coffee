@@ -3,6 +3,7 @@
 "use strict"
 
 # TODO:
+# - improve icons (inc favicon)
 # - clean up 'for in [0...length]' loops (length is never updated)
 # - clean up get / find names
 # - prevent gear axis cross chain? (if gear on higher level, lower level is no problem)

@@ -36,6 +36,7 @@ window.gearsketch.Point = Point
 # ---------------------------
 # ------- ArcSegment --------
 # ---------------------------
+# TODO: for consistency with LineSegment @start & @end should be points, old ones called @startAngle, @endAngle
 class ArcSegment
   constructor: (@center, @radius, @start, @end, @direction) ->
 
@@ -119,7 +120,7 @@ class ArcSegment
       if @intersectsLineSegment(segment)
         0
       else
-        pointNearestToCenter = Util.findNearestPointOnLineSegment(@center, segment.start, segment.end)
+        pointNearestToCenter = segment.findNearestPoint(@center)
         Math.min(@getDistanceToPoint(pointNearestToCenter)
         , @getDistanceToPoint(segment.start)
         , @getDistanceToPoint(segment.end)
@@ -142,21 +143,50 @@ class LineSegment
     @start.distance(@end)
 
   findPoint: (distanceToGo) ->
-    Util.getPointOnLineSegment(@start, @end, distanceToGo)
+    fraction = distanceToGo / @start.distance(@end)
+    @start.plus(@end.minus(@start).times(fraction))
+
+  # http://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment
+  findNearestPoint: (p) ->
+    segmentLength = @getLength()
+    if segmentLength is 0
+      @start
+    else
+      t = ((p.x - @start.x) * (@end.x - @start.x) + (p.y - @start.y) * (@end.y - @start.y)) / Math.pow(segmentLength, 2)
+      if t < 0
+        @start
+      else if t > 1
+        @end
+      else
+        @start.plus(@end.minus(@start).times(t))
 
   getDistanceToPoint: (point) ->
-    Util.getPointLineSegmentDistance(point, @start, @end)
+    point.distance(@findNearestPoint(point))
+
+  # http://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
+  findIntersection: (lineSegment) ->
+    p = @start
+    r = @end.minus(p)
+    q = lineSegment.start
+    s = lineSegment.end.minus(q)
+    crossRS = r.cross(s)
+    t = q.minus(p).cross(s) / crossRS
+    u = q.minus(p).cross(r) / crossRS
+    if Math.abs(crossRS) > Util.EPSILON and 0 <= t and t <= 1 and 0 <= u and u <= 1
+      p.plus(r.times(t))
+    else
+      null
 
   getDistanceToSegment: (segment) ->
     if segment instanceof LineSegment
-      if Util.findLineSegmentIntersection([@start, @end], [segment.start, segment.end])
+      if @findIntersection(segment)
         0
       else
         Math.min(
-          Util.getPointLineSegmentDistance(@start, segment.start, segment.end)
-        , Util.getPointLineSegmentDistance(@end, segment.start, segment.end)
-        , Util.getPointLineSegmentDistance(segment.start, @start, @end)
-        , Util.getPointLineSegmentDistance(segment.end, @start, @end))
+          @getDistanceToPoint(segment.start)
+        , @getDistanceToPoint(segment.end)
+        , segment.getDistanceToPoint(@start)
+        , segment.getDistanceToPoint(@end))
     else # segment is ArcSegment
       segment.getDistanceToSegment(this)
 
@@ -168,8 +198,6 @@ window.gearsketch.LineSegment = LineSegment
 # ---------------------------
 # ---------- Util -----------
 # ---------------------------
-# TODO: refactor line segment usage
-
 class Util
   # imports
   Point = window.gearsketch.Point
@@ -249,10 +277,6 @@ class Util
     set = {}
     @addAll(set, elements)
 
-  @getPointOnLineSegment: (a, b, distance) ->
-    fraction = distance / a.distance(b)
-    a.plus(b.minus(a).times(fraction))
-
   # find the point on the path at the given distance from its start
   @findPointOnPath: (path, distance) ->
     distanceToGo = distance
@@ -260,11 +284,10 @@ class Util
     numberOfPoints = path.length
     while distanceToGo > 0
       j = (i + 1) % numberOfPoints
-      p1 = path[i]
-      p2 = path[j]
-      segmentLength = p1.distance(p2)
+      segment = new LineSegment(path[i], path[j])
+      segmentLength = segment.getLength()
       if distanceToGo <= segmentLength
-        return @getPointOnLineSegment(p1, p2, distanceToGo)
+        return segment.findPoint(distanceToGo)
       else
         i = j
         distanceToGo -= segmentLength
@@ -305,39 +328,11 @@ class Util
   @findGearsInsidePolygon: (polygon, gears) ->
     (gear for own id, gear of gears when @isGearInsidePolygon(gear, polygon))
 
-  # http://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment
-  @findNearestPointOnLineSegment: (p, a, b) ->
-    segmentLength = a.distance(b)
-    if segmentLength is 0
-      a
-    else
-      t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (segmentLength * segmentLength)
-      if t < 0
-        a
-      else if t > 1
-        b
-      else
-        a.plus(b.minus(a).times(t))
+  @doesGearIntersectLineSegment: (gear, segment) ->
+    segment.getDistanceToPoint(gear.location) < (gear.pitchRadius + Util.EPSILON)
 
-  @getPointLineSegmentDistance: (p, a, b) ->
-    p.distance(@findNearestPointOnLineSegment(p, a, b))
-
-  @doesGearIntersectSegment: (gear, a, b) ->
-    @getPointLineSegmentDistance(gear.location, a, b) < (gear.pitchRadius + Util.EPSILON)
-
-  # TODO: REMOVE?
-  @doesGearIntersectTriangle: (gear, triangle) ->
-    @isPointInsidePolygon(gear.location, triangle) or
-    @doesGearIntersectSegment(gear, triangle[0], triangle[1]) or
-    @doesGearIntersectSegment(gear, triangle[0], triangle[2]) or
-    @doesGearIntersectSegment(gear, triangle[1], triangle[2])
-
-  @findGearsIntersectingTriangle: (gears, triangle) ->
-    (gear for own id, gear of gears when @doesGearIntersectTriangle(gear, triangle))
-  # END REMOVE?
-
-  @findGearsIntersectingSegment: (gears, a, b) ->
-    (gear for own id, gear of gears when @doesGearIntersectSegment(gear, a, b))
+  @findGearsIntersectingSegment: (gears, segment) ->
+    (gear for own id, gear of gears when @doesGearIntersectLineSegment(gear, segment))
 
   @getPointPathDistance: (point, path, isPathClosed = true) ->
     # using points instead of segments
@@ -346,33 +341,21 @@ class Util
     finalIndex = numberOfPoints - (if isPathClosed then 0 else 1)
     for i in [0...finalIndex]
       j = (i + 1) % numberOfPoints
-      d = Math.max(0, @getPointLineSegmentDistance(point, path[i], path[j]))
+      segment = new LineSegment(path[i], path[j])
+      d = Math.max(0, segment.getDistanceToPoint(point))
       distance = Math.min(distance, d)
     distance
 
-  # return gear nearest to point a that intersects line segment ab or null if no such gear exists
+  # return gear nearest to lineSegment.start that intersects lineSegment or null if no such gear exists
   # if ignoredGears is specified, these gears will never be returned
-  @findNearestIntersectingGear: (gears, a, b, ignoredGearIds = {}) ->
-    intersectingGears = @findGearsIntersectingSegment(gears, a, b)
-    intersectingGears.sort((g1, g2) => @getDistanceToGear(a, g1) - @getDistanceToGear(a, g2))
+  @findNearestIntersectingGear: (gears, lineSegment, ignoredGearIds = {}) ->
+    intersectingGears = @findGearsIntersectingSegment(gears, lineSegment)
+    intersectingGears.sort((g1, g2) =>
+      @getDistanceToGear(lineSegment.start, g1) - @getDistanceToGear(lineSegment.start, g2))
     for intersectingGear in intersectingGears
-      unless (intersectingGear.id of ignoredGearIds)
+      unless intersectingGear.id of ignoredGearIds
         return intersectingGear
     null
-
-  # http://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
-  @findLineSegmentIntersection: (segment1, segment2) ->
-    p = segment1[0]
-    r = segment1[1].minus(p)
-    q = segment2[0]
-    s = segment2[1].minus(q)
-    crossRS = r.cross(s)
-    t = q.minus(p).cross(s) / crossRS
-    u = q.minus(p).cross(r) / crossRS
-    if Math.abs(crossRS) > Util.EPSILON and 0 <= t and t <= 1 and 0 <= u and u <= 1
-      p.plus(r.times(t))
-    else
-      null
 
   # http://stackoverflow.com/questions/451426/how-do-i-calculate-the-surface-area-of-a-2d-polygon
   @findDirection: (polygon) ->
@@ -432,11 +415,11 @@ class Util
     tangentLine2 = [tangentPoints[@Side.RIGHT].plus(offset2), o2.plus(offset2)]
     tangentLines = {}
     if o1 is centers[0]
-      tangentLines[@Side.RIGHT] = tangentLine1
-      tangentLines[@Side.LEFT] = tangentLine2
+      tangentLines[@Side.RIGHT] = new LineSegment(tangentLine1[0], tangentLine1[1])
+      tangentLines[@Side.LEFT] = new LineSegment(tangentLine2[0], tangentLine2[1])
     else
-      tangentLines[@Side.RIGHT] = [tangentLine2[1], tangentLine2[0]]
-      tangentLines[@Side.LEFT] = [tangentLine1[1], tangentLine1[0]]
+      tangentLines[@Side.RIGHT] = new LineSegment(tangentLine2[1], tangentLine2[0])
+      tangentLines[@Side.LEFT] = new LineSegment(tangentLine1[1], tangentLine1[0])
     tangentLines
 
   # http://en.wikipedia.org/wiki/Tangent_lines_to_circles
@@ -457,11 +440,11 @@ class Util
     tangentLine2 = [tpr.plus(offset2), o2.plus(offset2)]
     tangentLines = {}
     if o1 is centers[0]
-      tangentLines[@Side.RIGHT] = tangentLine1
-      tangentLines[@Side.LEFT] = tangentLine2
+      tangentLines[@Side.RIGHT] = new LineSegment(tangentLine1[0], tangentLine1[1])
+      tangentLines[@Side.LEFT] = new LineSegment(tangentLine2[0], tangentLine2[1])
     else
-      tangentLines[@Side.RIGHT] = [tangentLine1[1], tangentLine1[0]]
-      tangentLines[@Side.LEFT] = [tangentLine2[1], tangentLine2[0]]
+      tangentLines[@Side.RIGHT] = new LineSegment(tangentLine1[1], tangentLine1[0])
+      tangentLines[@Side.LEFT] = new LineSegment(tangentLine2[1], tangentLine2[0])
     tangentLines
 
   @findExternalTangentsOfGears: (gear1, gear2) ->

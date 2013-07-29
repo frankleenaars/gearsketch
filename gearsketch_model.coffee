@@ -163,7 +163,7 @@ class Chain
     while d < pathLength and !supportingGear?
       d += stepSize
       b = Util.findPointOnPath(path, d)
-      supportingGear = Util.findNearestIntersectingGear(gears, a, b)
+      supportingGear = Util.findNearestIntersectingGear(gears, new LineSegment(a, b))
     [supportingGear, d]
 
   findSupportingGearsOnPath: (gears, firstSupportingGear, path, startDistance = 0, isClosed = true) ->
@@ -179,7 +179,8 @@ class Chain
       tangentSide = @findReverseChainTangentSide(supportingGear)
       tangentPoint = Util.findGearTangentPoints(b, supportingGear)[tangentSide]
       a = tangentPoint if tangentPoint? # in case point b is in gear
-      nextSupportingGear = Util.findNearestIntersectingGear(gears, a, b, Util.makeSet(supportingGear.id))
+      lineSegment = new LineSegment(a, b)
+      nextSupportingGear = Util.findNearestIntersectingGear(gears, lineSegment, Util.makeSet(supportingGear.id))
       if nextSupportingGear?
         supportingGear = nextSupportingGear
         supportingGears.push(supportingGear)
@@ -309,9 +310,9 @@ class Chain
       g2 = gears[j]
       g3 = gears[k]
 
-      line1 = Util.findTangentLine(g1, g2, @innerGearIds, @direction)
-      line2 = Util.findTangentLine(g2, g3, @innerGearIds, @direction)
-      intersection = Util.findLineSegmentIntersection(line1, line2)
+      lineSegment1 = Util.findTangentLine(g1, g2, @innerGearIds, @direction)
+      lineSegment2 = Util.findTangentLine(g2, g3, @innerGearIds, @direction)
+      intersection = lineSegment1.findIntersection(lineSegment2)
       if intersection? # g2 cannot support chain
         tangentSideG1 = @findReverseChainTangentSide(g1)
         tangentPointG1 = Util.findGearTangentPoints(intersection, g1)[tangentSideG1]
@@ -324,7 +325,7 @@ class Chain
         gears.splice.apply(gears, [j, 1].concat(replacementGears))
         @removeRepeatedGears(gears)
         return @updateChain(board, gears) # start over
-      gear = Util.findNearestIntersectingGear(acknowledgedGears, line1[0], line1[1], Util.makeSet(g1.id, g2.id))
+      gear = Util.findNearestIntersectingGear(acknowledgedGears, lineSegment1, Util.makeSet(g1.id, g2.id))
       if gear?
         gears.splice(j, 0, gear)
         if @containsSuccessiveOverlappingGears(gears)
@@ -338,7 +339,7 @@ class Chain
       g1 = gears[i]
       g2 = gears[j]
       tangentLine = Util.findTangentLine(g1, g2, @innerGearIds, @direction)
-      updatedPoints.push(tangentLine[0], tangentLine[1])
+      updatedPoints.push(tangentLine.start, tangentLine.end)
     updatedSegments = []
     for i in [0...numberOfGears]
       p0 = updatedPoints[2 * i]
