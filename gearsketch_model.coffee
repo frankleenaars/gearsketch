@@ -14,7 +14,8 @@ window.gearsketch.model = {}
 class Gear
   nextGearId = 0
 
-  constructor: (@location, @rotation, @numberOfTeeth, id) ->
+  constructor: (@location, @rotation, @numberOfTeeth, id,
+                @momentum = 0, @group = 0, @level = 0, @connections = {}) ->
     if id?
       @id = id
     else
@@ -27,8 +28,17 @@ class Gear
   getCircumference: ->
     2 * Math.PI * @pitchRadius
 
+  # TODO: necessary?
+  restore: (gear) ->
+    @location = gear.location
+    @rotation = gear.rotation
+    @momentum = gear.momentum
+    @group = gear.group
+    @level = gear.level
+    @connections = gear.connections
+
   clone: ->
-    new Gear(@location.clone(), @rotation, @numberOfTeeth, @id)
+    new Gear(@location.clone(), @rotation, @numberOfTeeth, @id, @momentum, @group, @level, @connections)
 
 window.gearsketch.model.Gear = Gear
 
@@ -180,7 +190,7 @@ class Chain
   points: []
   segments: []
 
-  constructor: (stroke, id) ->
+  constructor: (stroke, id, @group = 0, @level = 0, @connections = {}) ->
     if id?
       @id = id
     else
@@ -354,8 +364,8 @@ class Chain
     gears = board.getGears()
     minDistances = {}
     for own id, gear of gears
-      group = board.getGroup(gear)
-      level = board.getLevel(gear)
+      group = gear.group
+      level = gear.level
       d = Util.getPointPathDistance(gear.location, @points) - gear.pitchRadius
       if !minDistances[group]?[level]? or d < minDistances[group][level]
         minDistances[group] ?= {}
@@ -377,7 +387,7 @@ class Chain
     # ignore all gears not on an acknowledged level
     ignoredGearIds = {}
     for own id, gear of gears
-      if acknowledgedLevels[board.getGroup(gear)] isnt board.getLevel(gear)
+      if acknowledgedLevels[gear.group] isnt gear.level
         ignoredGearIds[id] = true
     ignoredGearIds
 
@@ -387,8 +397,8 @@ class Chain
     groups = {}
     for gearId in @supportingGearIds
       gear = board.getGearWithId(gearId)
-      group = board.getGroup(gear)
-      level = board.getLevel(gear)
+      group = gear.group
+      level = gear.level
       if !groups[group]?
         groups[group] = {}
       groups[group][level] = true
@@ -396,8 +406,8 @@ class Chain
     # ignore all gears that belong to a supporting gear's group but are on a different level
     updatedIgnoredGearIds = {}
     for id, gear of board.getGears()
-      group = board.getGroup(gear)
-      level = board.getLevel(gear)
+      group = gear.group
+      level = gear.level
       if groups[group]? and !groups[group][level]?
         updatedIgnoredGearIds[id] = true
     @ignoredGearIds = updatedIgnoredGearIds
@@ -528,7 +538,7 @@ class Chain
     @updateChain(board)
 
   clone: ->
-    copy = new Chain(@points, @id)
+    copy = new Chain(@points, @id, @group, @level)
     copy.segments = Util.clone(@segments)
     copy.ignoredGearIds = Util.clone(@ignoredGearIds)
     copy.innerGearIds = Util.clone(@innerGearIds)
@@ -543,6 +553,7 @@ window.gearsketch.model.Chain = Chain
 # ---------------------------
 # TODO:
 # - only allow top level gears to be (re)moved
+# - push info about gears and chains (momentum, connections, group, level) to their classes
 
 class Board
   # -- imported constants --
@@ -561,49 +572,35 @@ class Board
 
   gears: {}
   connections: {}
-  groups: {}
-  levels: {}
-  momenta: {}
   chains: {}
 
   # TODO: should probably add board.clone() method and/or use constructor
   saveBoard: ->
     gears: Util.clone(@gears)
     connections: Util.clone(@connections)
-    groups: Util.clone(@groups)
-    levels: Util.clone(@levels)
-    momenta: Util.clone(@momenta)
     chains: Util.clone(@chains)
 
   restoreBoard: (board) ->
     for own id, gear of @gears
-      gear.location = board.gears[id].location
-      gear.rotation = board.gears[id].rotation
+      gear.restore(board.gears[id])
     @connections = board.connections
-    @groups = board.groups
-    @levels = board.levels
     @chains = board.chains
 
   restoreBoardAfterDemo: (board) ->
     @gears = board.gears
     @connections = board.connections
-    @groups = board.groups
-    @levels = board.levels
-    @momenta = board.momenta
     @chains = board.chains
 
   clearBoard: ->
     @gears = {}
     @connections = {}
-    @groups = {}
-    @levels = {}
     @momenta = {}
     @chains = {}
 
   getNextGroup: ->
     nextGroup = 0
-    for own gear, group of @groups
-      nextGroup = Math.max(nextGroup, group + 1)
+    for own id, gear of @gears
+      nextGroup = Math.max(nextGroup, gear.group + 1)
     nextGroup
 
   getGears: ->
@@ -620,7 +617,7 @@ class Board
     acknowledgedGears
 
   getLevelScore: (gear) ->
-    1000 * @groups[gear.id] + @levels[gear.id]
+    1000 * gear.group + gear.level
 
   getGearsSortedByGroupsAndLevel: (gears = @getGearList()) ->
     gearsWithLevelScore = []
@@ -679,8 +676,10 @@ class Board
       if !(id of updatedGroups)
         @updateGroupsAndLevelsFrom(id, group, 0, updatedGroups, updatedLevels)
         group++
-    @groups = updatedGroups
-    @levels = updatedLevels
+    for own id, turningObject of @getTurningObjects()
+      turningObject.group = updatedGroups[id]
+      turningObject.level = updatedLevels[id]
+    null
 
   addConnection: (turningObject1, turningObject2, connectionType) ->
     @connections[turningObject1.id][turningObject2.id] = connectionType
@@ -691,7 +690,7 @@ class Board
     meshingNeighbors = []
     for own candidateId, candidate of @gears
       if candidate isnt gear and Util.getEdgeDistance(gear, candidate) < EPSILON
-        if (@groups[candidateId] isnt @groups[gear.id]) or (@levels[candidateId] is @levels[gear.id])
+        if (candidate.group isnt gear.group) or (candidate.level is gear.level)
           meshingNeighbors.push(candidate)
     meshingNeighbors
 
@@ -827,7 +826,7 @@ class Board
     false
 
   doChainsCrossEachOther: (c1, c2) ->
-    if (@groups[c1.id] isnt @groups[c2.id]) or (@levels[c1.id] is @levels[c2.id])
+    if (c1.group isnt c2.group) or (c1.level is c2.level)
       if c1.distanceToChain(c2) < Chain.WIDTH
         return true
     false
@@ -900,12 +899,12 @@ class Board
 
   isBoardValid: ->
     for own id1, gear1 of @gears
-      group1 = @groups[id1]
-      level1 = @levels[id1]
+      group1 = gear1.group
+      level1 = gear1.level
       for own id2, gear2 of @gears
         unless gear1 is gear2
-          group2 = @groups[id2]
-          level2 = @levels[id2]
+          group2 = gear2.group
+          level2 = gear2.level
           axisDistance = gear1.location.distance(gear2.location)
           maxOuterRadius = Math.max(gear1.outerRadius, gear2.outerRadius)
           combinedOuterRadius = gear1.outerRadius + gear2.outerRadius
@@ -917,7 +916,6 @@ class Board
               return false
           else if axisDistance < maxOuterRadius + AXIS_RADIUS
             return false
-    #!@doesBoardContainCycle()
     !@doChainsCrossNonSupportingGears() and
     !@doAnyChainsCrossEachOther() and
     @areAllMeshingGearsAligned() and
@@ -972,10 +970,9 @@ class Board
 
   addGear: (gear) ->
     oldBoard = @saveBoard()
+    gear.group = @getNextGroup()
     @gears[gear.id] = gear
     @connections[gear.id] = {}
-    @groups[gear.id] = @getNextGroup()
-    @levels[gear.id] = 0
     @addGearToChains(gear)
     if !@placeGear(gear, gear.location)
       @removeGear(gear)
@@ -984,28 +981,10 @@ class Board
     else
       true
 
-  getMomentum: (gear) ->
-    @momenta[gear.id]
-
-  setMomentum: (gear, momentum) ->
-    @momenta[gear.id] = momentum
-
-  removeMomentum: (gear) ->
-    delete @momenta[gear.id]
-
-  getGroup: (gear) ->
-    @groups[gear.id]
-
-  getLevel: (gear) ->
-    @levels[gear.id]
-
   removeGear: (gear) ->
-    @removeMomentum(gear)
     @removeAllConnections(gear)
     delete @gears[gear.id]
     delete @connections[gear.id]
-    delete @groups[gear.id]
-    delete @levels[gear.id]
     @removeGearFromChains(gear)
 
   getGearAt: (location) ->
@@ -1025,9 +1004,8 @@ class Board
 
   rotateAllTurningObjects: (delta) ->
     for own id, gear of @gears
-      momentum = @getMomentum(gear)
-      if momentum
-        angle = momentum * delta
+      if gear.momentum
+        angle = gear.momentum * delta
         @rotateTurningObjectsFrom(gear, angle, {})
 
   addChainConnections: (chain) ->
@@ -1061,14 +1039,12 @@ class Board
     @removeAllConnections(chain)
     delete @chains[chain.id]
     delete @connections[chain.id]
-    delete @groups[chain.id]
-    delete @levels[chain.id]
 
   getChains: ->
     @chains
 
   getChainsInGroupOnLevel: (group, level) ->
-    chain for own id, chain of @chains when (@groups[chain.id] is group) and (@levels[chain.id] is level)
+    chain for own id, chain of @chains when (chain.group is group) and (chain.level is level)
 
   getTurningObjects: ->
     turningObjects = {}

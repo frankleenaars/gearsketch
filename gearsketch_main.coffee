@@ -155,7 +155,7 @@ class GearSketch
       else if @selectedButton is "momentumButton"
         @selectedGear = @board.getGearAt(point)
         if @selectedGear
-          @board.removeMomentum(@selectedGear)
+          @selectedGear.momentum = 0
           @selectedGearMomentum = @calculateMomentumFromCoords(@selectedGear, x, y)
         @isPenDown = true
 
@@ -190,9 +190,9 @@ class GearSketch
         if @selectedGear
           MIN_MOMENTUM = 0.2
           if Math.abs(@selectedGearMomentum) > MIN_MOMENTUM
-            @board.setMomentum(@selectedGear, @selectedGearMomentum)
+            @selectedGear.momentum = @selectedGearMomentum
           else
-            @board.setMomentum(@selectedGear, 0)
+            @selectedGear.momentum = 0
         @selectedGearMomentum = 0
       @selectedGear = null
       @goalLocationGear = null
@@ -491,9 +491,7 @@ class GearSketch
       arrowsToDraw = []
       for i in [0...sortedGears.length]
         gear = sortedGears[i]
-        group = @board.getGroup(gear)
-        level = @board.getLevel(gear)
-        momentum = @board.getMomentum(gear)
+        momentum = gear.momentum
         if gear is @selectedGear and @goalLocationGear
           @drawGear(ctx, gear, "grey")
           if momentum
@@ -506,10 +504,9 @@ class GearSketch
         # draw chains and arrows when all the gears in current group on current level are drawn
         shouldDrawChainsAndArrows =
           (i is sortedGears.length - 1) or
-          @board.getGroup(gear) isnt @board.getGroup(sortedGears[i + 1]) or
-          @board.getLevel(gear) isnt @board.getLevel(sortedGears[i + 1])
+          (@board.getLevelScore(gear) isnt @board.getLevelScore(sortedGears[i + 1]))
         if shouldDrawChainsAndArrows
-          for chain in @board.getChainsInGroupOnLevel(group, level)
+          for chain in @board.getChainsInGroupOnLevel(gear.group, gear.level)
             @drawChain(ctx, chain)
           for arrow in arrowsToDraw
             @drawMomentum(ctx, arrow[0], arrow[1], arrow[2])
@@ -520,7 +517,7 @@ class GearSketch
         @drawGear(ctx, @goalLocationGear, "red")
 
       # draw selected gear momentum
-      if @selectedGear and @selectedGearMomentum
+      if @selectedGear? and @selectedGearMomentum
         @drawMomentum(ctx, @selectedGear, @selectedGearMomentum)
 
       # draw stroke
