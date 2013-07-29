@@ -30,7 +30,6 @@ class Gear
   getCircumference: ->
     2 * Math.PI * @pitchRadius
 
-  # TODO: necessary?
   restore: (gear) ->
     @location = gear.location
     @rotation = gear.rotation
@@ -437,13 +436,7 @@ class Board
     CHAIN_INSIDE: "chain_inside"
     CHAIN_OUTSIDE: "chain_outside"
 
-  gears: {}
-  chains: {}
-
-  # TODO: should probably add board.clone() method and/or use constructor
-  saveBoard: ->
-    gears: Util.clone(@gears)
-    chains: Util.clone(@chains)
+  constructor: (@gears = {}, @chains = {}) ->
 
   restoreBoard: (board) ->
     for own id, gear of @gears
@@ -773,7 +766,7 @@ class Board
     @areConnectionRatiosConsistent()
 
   placeGear: (gear, location) ->
-    oldBoard = @saveBoard()
+    oldBoard = @clone()
     @removeAllConnections(gear)
     gear.location = location.clone()
     nearestAxis = @findNearestAxis(gear)
@@ -820,7 +813,7 @@ class Board
         @updateChainConnections(chain)
 
   addGear: (gear) ->
-    oldBoard = @saveBoard()
+    oldBoard = @clone()
     gear.group = @getNextGroup()
     @gears[gear.id] = gear
     @addGearToChains(gear)
@@ -869,7 +862,7 @@ class Board
     @addChainConnections(chain)
 
   addChain: (chain) ->
-    oldBoard = @saveBoard()
+    oldBoard = @clone()
     @chains[chain.id] = chain
     if chain.tighten(this)
       @chains[chain.id] = chain
@@ -898,5 +891,9 @@ class Board
     turningObjects[id] = gear for own id, gear of @gears
     turningObjects[id] = chain for own id, chain of @chains
     turningObjects
+
+  clone: ->
+    gears: Util.clone(@gears)
+    chains: Util.clone(@chains)
 
 window.gearsketch.model.Board = Board

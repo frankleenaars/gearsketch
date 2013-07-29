@@ -806,7 +806,7 @@ class GearSketch
 
   playDemo: ->
     @loadDemoMovements() # load these on each play in case canvas size changed
-    @boardBackup = @board.saveBoard()
+    @boardBackup = @board.clone()
     @board.clearBoard()
     @currentDemoMovement = 0
     @movementCompletion = 0
