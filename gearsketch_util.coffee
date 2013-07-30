@@ -231,7 +231,7 @@ class Util
 
     if obj instanceof Object
       copy = {}
-      for own key, val of obj
+      for own key of obj
         copy[key] = @clone(obj[key])
       return copy
 
@@ -255,22 +255,11 @@ class Util
       set[element] = true
     set
 
-  # compares two arrays of numbers
-  @areArraysEqual: (a1, a2, orderMatters = true) ->
-    if !a1? or !a2?
-      false
-    else if a1.length isnt a2.length
-      false
-    else if orderMatters
-      a1.every((e, i) -> e is a2[i])
-    else # order doesn't matter
-      sa1 = (e for e in a1).sort((e1, e2) -> e1 - e2)
-      sa2 = (e for e in a2).sort((e1, e2) -> e1 - e2)
-      @areArraysEqual(sa1, sa2)
+  @makeSetFromList: (elements) ->
+    @addAll({}, elements)
 
   @makeSet: (elements...) ->
-    set = {}
-    @addAll(set, elements)
+    @makeSetFromList(elements)
 
   # find the point on the path at the given distance from its start
   @findPointOnPath: (path, distance) ->
@@ -321,13 +310,13 @@ class Util
     edgePoints.every((p) => @isPointInsidePolygon(p, polygon))
 
   @findGearsInsidePolygon: (polygon, gears) ->
-    (gear for own id, gear of gears when @isGearInsidePolygon(gear, polygon))
+    gear for own id, gear of gears when @isGearInsidePolygon(gear, polygon)
 
   @doesGearIntersectLineSegment: (gear, segment) ->
     segment.getDistanceToPoint(gear.location) < (gear.pitchRadius + Util.EPSILON)
 
   @findGearsIntersectingSegment: (gears, segment) ->
-    (gear for own id, gear of gears when @doesGearIntersectLineSegment(gear, segment))
+    gear for own id, gear of gears when @doesGearIntersectLineSegment(gear, segment)
 
   @getPointPathDistance: (point, path, isPathClosed = true) ->
     # using points instead of segments
@@ -548,7 +537,6 @@ class Util
     ctx.fill()
     ctx.restore()
   # END TEMP
-
 
 window.gearsketch.Util = Util
 

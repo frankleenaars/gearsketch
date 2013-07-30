@@ -65,10 +65,7 @@ class Chain
     @rotation = 0
 
   getLength: ->
-    length = 0
-    for segment in @segments
-      length += segment.getLength()
-    length
+    @segments.reduce(((total, segment) -> total + segment.getLength()), 0)
 
   getCircumference: ->
     @getLength()
@@ -98,25 +95,21 @@ class Chain
   getDistanceToPoint: (point) ->
     Math.min.apply(null, (segment.getDistanceToPoint(point) for segment in @segments))
 
-  getDistanceToLineSegment: (lineSegment) ->
-    Math.min.apply(null, (segment.getDistanceToSegment(lineSegment) for segment in @segments))
+  getDistanceToSegment: (s) ->
+    Math.min.apply(null, (segment.getDistanceToSegment(s) for segment in @segments))
+
+  distanceToChain: (chain) ->
+    Math.min.apply(null, (chain.getDistanceToSegment(segment) for segment in @segments))
 
   intersectsPath: (path) ->
     for i in [0...path.length - 1]
       j = i + 1
-      if @getDistanceToLineSegment(new LineSegment(path[i], path[j])) is 0
+      if @getDistanceToSegment(new LineSegment(path[i], path[j])) is 0
         return true
     false
 
-  distanceToChain: (chain) ->
-    minDistance = Number.MAX_VALUE
-    for segment in @segments
-      for segment2 in chain.segments
-        minDistance = Math.min(minDistance, segment.getDistanceToSegment(segment2))
-    minDistance
-
   doesChainCrossNonSupportingGears: (board) ->
-    for id, gear of board.getGears()
+    for own id, gear of board.getGears()
       if !(id in @supportingGearIds) and !(id of @ignoredGearIds)
         if @getDistanceToPoint(gear.location) < gear.pitchRadius + Util.EPSILON
           return true
@@ -230,7 +223,7 @@ class Chain
       lastSupportingGear = supportingGears[supportingGears.length-1]
       nextSupportingGears = @findSupportingGearsOnPath(gears, lastSupportingGear, finalSegment, 0, false)
       supportingGears = supportingGears.concat(nextSupportingGears)
-    (gear.id for gear in @removeRepeatedGears(supportingGears))
+    gear.id for gear in @removeRepeatedGears(supportingGears)
 
   findIgnoredGearIds: (board) ->
     # find minimal distance of each level of gears in each group to the chain
@@ -278,7 +271,7 @@ class Chain
 
     # ignore all gears that belong to a supporting gear's group but are on a different level
     updatedIgnoredGearIds = {}
-    for id, gear of board.getGears()
+    for own id, gear of board.getGears()
       group = gear.group
       level = gear.level
       if groups[group]? and !groups[group][level]?
@@ -388,7 +381,7 @@ class Chain
     updatedInnerGearIds = {}
     for own id, gear of updatedAcknowledgedGears when Util.isPointInsidePolygon(gear.location, chainPolygon)
       updatedInnerGearIds[id] = true
-    for gearId of @innerGearIds
+    for own gearId of @innerGearIds
       if !(gearId of updatedInnerGearIds) and (gearId in @supportingGearIds)
         return false
 
@@ -403,8 +396,7 @@ class Chain
   tighten: (board) ->
     @ignoredGearIds = @findIgnoredGearIds(board)
     acknowledgedGears = board.getAcknowledgedGears(@ignoredGearIds)
-    @innerGearIds = {}
-    @innerGearIds[gear.id] = true for gear in Util.findGearsInsidePolygon(@points, acknowledgedGears)
+    @innerGearIds = Util.makeSetFromList(gear.id for gear in Util.findGearsInsidePolygon(@points, acknowledgedGears))
     if Object.keys(@innerGearIds).length < 2
       return false
     @direction = Util.findDirection(@points)
@@ -465,32 +457,25 @@ class Board
     @gears
 
   getGearList: ->
-    (gear for own id, gear of @gears)
+    gear for own id, gear of @gears
 
   getAcknowledgedGears: (ignoredGearIds) ->
     acknowledgedGears = {}
-    for id, gear of @gears
-      if !(id of ignoredGearIds)
-        acknowledgedGears[id] = gear
+    acknowledgedGears[id] = gear for own id, gear of @gears when !(id of ignoredGearIds)
     acknowledgedGears
 
   getLevelScore: (gear) ->
     1000 * gear.group + gear.level
 
   getGearsSortedByGroupsAndLevel: (gears = @getGearList()) ->
-    gearsWithLevelScore = []
-    for gear in gears
-      score = @getLevelScore(gear)
-      gearsWithLevelScore.push([gear, score])
-    gearsWithLevelScore.sort((g1, g2) -> g1[1] - g2[1])
-    (gearWithLevelScore[0] for gearWithLevelScore in gearsWithLevelScore)
+    gears.sort((g1, g2) => @getLevelScore(g1) - @getLevelScore(g2))
 
   removeConnection: (turningObject1, turningObject2) ->
     delete turningObject1.connections[turningObject2.id]
     delete turningObject2.connections[turningObject1.id]
 
   removeAllConnections: (turningObject) ->
-    for own neighborId, connectionType of turningObject.connections
+    for own neighborId of turningObject.connections
       neighbor = @getTurningObjects()[neighborId]
       @removeConnection(turningObject, neighbor)
     @updateGroupsAndLevels()
@@ -531,7 +516,7 @@ class Board
     updatedGroups = {}
     updatedLevels = {}
     group = 0
-    for own id, gear of @gears # chains are always connected to gears, so will be updated as well
+    for own id of @gears # chains are always connected to gears, so will be updated as well
       if !(id of updatedGroups)
         @updateGroupsAndLevelsFrom(id, group, 0, updatedGroups, updatedLevels)
         group++
@@ -669,7 +654,7 @@ class Board
     @alignMeshingGears(gear)
 
   doChainsCrossNonSupportingGears: ->
-    for id, chain of @chains
+    for own id, chain of @chains
       if chain.doesChainCrossNonSupportingGears(this)
         return true
     false
@@ -681,7 +666,7 @@ class Board
     false
 
   doesChainCrossAnyOtherChain: (chain) ->
-    for id2, chain2 of @chains
+    for own id2, chain2 of @chains
       if chain isnt chain2
         if @doChainsCrossEachOther(chain, chain2)
           return true
@@ -843,7 +828,7 @@ class Board
     gear
 
   isTopLevelGear: (gear) ->
-    for id, connectionType of gear.connections
+    for own id, connectionType of gear.connections
       if connectionType is ConnectionType.AXIS and @gears[id].level > gear.level
         return false
     true
@@ -860,7 +845,7 @@ class Board
     @gears[id]
 
   getGearsWithIds: (ids) ->
-    (@gears[id] for id in ids)
+    @gears[id] for id in ids
 
   rotateAllTurningObjects: (delta) ->
     for own id, gear of @gears

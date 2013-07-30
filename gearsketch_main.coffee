@@ -4,10 +4,11 @@
 
 # TODO:
 # - improve icons (inc favicon)
-# - clean up 'for in [0...length]' loops (length is never updated)
+# - use makeSet where appropriate
 # - clean up get / find names
 # - prevent gear axis crossing chain? (if gear on higher level, lower level is no problem?)
-# - use for _own_ ... of ... consistently
+# - allow gears to overlap other gears' axes if they are on a higher level?
+# - figure out why drawing with RAF is slower than drawing without RAF on iPad
 
 # imports
 Point = window.gearsketch.Point
@@ -76,15 +77,9 @@ class GearSketch
     @updateCanvasSize()
     @addCanvasListeners()
     @lastUpdateTime = new Date().getTime()
-    # TODO: why is RAF slower on ipad?
     #@updateAndDraw()
     @updateAndDrawNoRAF()
     Util.tempRegisterDrawMethod(this, @draw)
-#    for x in [0...3]
-#      for y in [0...3]
-#        @board.addGear(new Gear(new Point(100 + x * 120, 200 + y * 120), 0, 20))
-#    @board.addGear(new Gear(new Point(600, 100), 0, 8))
-#    @board.addGear(new Gear(new Point(600, 300), 0, 8))
 
   buttonLoaded: ->
     @loadedButtons++
@@ -232,12 +227,12 @@ class GearSketch
 
   createGearFromStroke: (stroke) ->
     if stroke.length > 0
+      sumX = 0
+      sumY = 0
       minX = Number.MAX_VALUE
       maxX = Number.MIN_VALUE
       minY = Number.MAX_VALUE
       maxY = Number.MIN_VALUE
-      sumX = 0
-      sumY = 0
       for p in stroke
         sumX += p.x
         sumY += p.y
@@ -245,9 +240,9 @@ class GearSketch
         maxX = Math.max(maxX, p.x)
         minY = Math.min(minY, p.y)
         maxY = Math.max(maxY, p.y)
-        width = maxX - minX
-        height = maxY - minY
-        t = Math.floor(0.5 * (width + height) / MODULE)
+      width = maxX - minX
+      height = maxY - minY
+      t = Math.floor(0.5 * (width + height) / MODULE)
 
       # find area, based on http://stackoverflow.com/questions/451426
       # /how-do-i-calculate-the-surface-area-of-a-2d-polygon
