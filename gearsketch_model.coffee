@@ -418,9 +418,6 @@ window.gearsketch.model.Chain = Chain
 # ---------------------------
 # ---------- Board ----------
 # ---------------------------
-# TODO:
-# - only allow top level gears to be (re)moved
-
 class Board
   # -- imported constants --
   MODULE = Util.MODULE
@@ -829,14 +826,28 @@ class Board
     delete @gears[gear.id]
     @removeGearFromChains(gear)
 
-  getGearAt: (location) ->
+  getGearAt: (location, candidates = @gears) ->
     gear = null
-    for own id, candidate of @gears
+    for own id, candidate of candidates
       distance = location.distance(candidate.location)
       if distance < candidate.outerRadius
         if !gear or candidate.numberOfTeeth < gear.numberOfTeeth
           gear = candidate
     gear
+
+  isTopLevelGear: (gear) ->
+    for id, connectionType of gear.connections
+      if connectionType is ConnectionType.AXIS and @gears[id].level > gear.level
+        return false
+    true
+
+  getTopLevelGears: ->
+    topLevelGears = {}
+    topLevelGears[id] = gear for own id, gear of @gears when @isTopLevelGear(gear)
+    topLevelGears
+
+  getTopLevelGearAt: (location) ->
+    @getGearAt(location, @getTopLevelGears())
 
   getGearWithId: (id) ->
     @gears[id]

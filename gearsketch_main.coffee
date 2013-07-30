@@ -7,7 +7,7 @@
 # - clean up 'for in [0...length]' loops (length is never updated)
 # - clean up get / find names
 # - prevent gear axis cross chain? (if gear on higher level, lower level is no problem)
-# - use for _own_ of ... consistently
+# - use for _own_ ... of ... consistently
 
 # imports
 Point = window.gearsketch.Point
@@ -150,10 +150,11 @@ class GearSketch
         else
           @selectedButton = button.name
       else if @selectedButton is "gearButton"
-        @selectedGear = @board.getGearAt(point)
-        if @selectedGear
+        #@selectedGear = @board.getGearAt(point)
+        @selectedGear = @board.getTopLevelGearAt(point)
+        if @selectedGear?
           @offset = point.minus(@selectedGear.location)
-        else
+        else if !@board.getGearAt(point)? # don't create stroke if lower level gear selected
           @stroke.push(point)
         @isPenDown = true
       else if @selectedButton is "chainButton"
@@ -178,7 +179,7 @@ class GearSketch
           else
             @goalLocationGear =
               new Gear(goalLocation, @selectedGear.rotation, @selectedGear.numberOfTeeth, @selectedGear.id)
-        else
+        else if @stroke.length > 0
           @stroke.push(point)
       else if @selectedButton is "chainButton"
         @stroke.push(point)
@@ -189,7 +190,7 @@ class GearSketch
   handlePenUp: ->
     if @isPenDown
       if @selectedButton is "gearButton"
-        unless @selectedGear
+        unless (@selectedGear? or @stroke.length is 0)
           @processGearStroke()
       else if @selectedButton is "chainButton"
         @processChainStroke()
@@ -267,7 +268,7 @@ class GearSketch
     null
 
   removeStrokedGears: (stroke) ->
-    for own id, gear of @board.getGears()
+    for own id, gear of @board.getTopLevelGears()
       if Util.getPointPathDistance(gear.location, stroke, false) < gear.innerRadius
         @board.removeGear(gear)
 
@@ -554,7 +555,7 @@ class GearSketch
         ctx.save()
         ctx.fillStyle = "black"
         ctx.font = "bold 20px Arial"
-        ctx.fillText("Click anywhere to stop the demonstration.", 20, 120)
+        ctx.fillText("click anywhere to stop the demonstration", 20, 120)
         @drawDemoPointer(ctx, @pointerLocation)
         ctx.restore()
 
@@ -566,6 +567,7 @@ class GearSketch
 
   # -- usage demo --
   loadDemoMovements: ->
+    # TODO: update to work with changes in removing gears
     @demoMovements = [
       from: @getButtonCenter("helpButton")
       to: @getButtonCenter("gearButton")
