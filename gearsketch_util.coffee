@@ -98,7 +98,7 @@ class ArcSegment
         return true
       false
 
-  # TODO: fix algorithms
+  # TODO: fix algorithms (current implementation works for current usage, but is incorrect)
   getDistanceToSegment: (segment) ->
     if segment instanceof ArcSegment
       if @center.distance(segment.center) > Util.EPSILON

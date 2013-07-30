@@ -6,7 +6,7 @@
 # - improve icons (inc favicon)
 # - clean up 'for in [0...length]' loops (length is never updated)
 # - clean up get / find names
-# - prevent gear axis cross chain? (if gear on higher level, lower level is no problem)
+# - prevent gear axis crossing chain? (if gear on higher level, lower level is no problem?)
 # - use for _own_ ... of ... consistently
 
 # imports
@@ -567,189 +567,158 @@ class GearSketch
 
   # -- usage demo --
   loadDemoMovements: ->
-    # TODO: update to work with changes in removing gears
     @demoMovements = [
       from: @getButtonCenter("helpButton")
       to: @getButtonCenter("gearButton")
-      atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_TAP
       type: MovementType.STRAIGHT
       duration: 2000
     ,
-      from: @getButtonCenter("gearButton")
       to: new Point(300, 200)
-      atStart: MovementAction.PEN_UP
-      atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: new Point(300, 200)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.CIRCLE
       radius: 100
       duration: 1500
     ,
-      from: new Point(300, 200)
       to: new Point(500, 200)
-      atStart: MovementAction.PEN_UP
-      atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: new Point(500, 200)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.CIRCLE
       radius: 40
       duration: 1000
     ,
-      from: new Point(500, 200)
       to: new Point(500, 240)
-      atStart: MovementAction.PEN_UP
-      atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 500
     ,
-      from: new Point(500, 240)
       to: new Point(300, 300)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: new Point(300, 300)
       to: new Point(100, 180)
-      atStart: MovementAction.PEN_UP
-      atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: new Point(100, 180)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.CIRCLE
       radius: 90
       duration: 1000
     ,
-      from: new Point(100, 180)
       to: new Point(100, 260)
-      atStart: MovementAction.PEN_UP
-      atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 500
     ,
-      from: new Point(100, 260)
       to: new Point(180, 260)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: new Point(180, 260)
       to: new Point(550, 220)
-      atStart: MovementAction.PEN_UP
-      atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: new Point(550, 220)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.CIRCLE
       radius: 80
       duration: 1000
     ,
-      from: new Point(550, 220)
       to: @getButtonCenter("chainButton")
-      atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_TAP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: @getButtonCenter("chainButton")
       to: new Point(280, 150)
-      atStart: MovementAction.PEN_UP
-      atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: new Point(280, 150)
       atStart: MovementAction.PEN_DOWN
-      atEnd: MovementAction.PEN_DOWN
       type: MovementType.LEFT_HALF_CIRCLE
       radius: 140
       duration: 1500
-      noPause: true
+      pause: 0
     ,
-      # TODO: fix PEN_UP / PEN_DOWN
-      from: new Point(280, 430)
       to: new Point(600, 400)
-      atStart: MovementAction.PEN_UP
-      atEnd: MovementAction.PEN_DOWN
       type: MovementType.STRAIGHT
       duration: 1000
-      noPause: true
+      pause: 0
     ,
-      from: new Point(600, 400)
-      atStart: MovementAction.PEN_UP
-      atEnd: MovementAction.PEN_DOWN
       type: MovementType.RIGHT_HALF_CIRCLE
       radius: 110
       duration: 1000
-      noPause: true
+      pause: 0
     ,
-      from: new Point(600, 180)
       to: new Point(280, 150)
-      atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: new Point(280, 150)
       to: @getButtonCenter("momentumButton")
-      atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_TAP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: @getButtonCenter("momentumButton")
       to: new Point(185, 180)
-      atStart: MovementAction.PEN_UP
-      atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: new Point(185, 180)
       to: new Point(150, 190)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: new Point(150, 200)
       to: @getButtonCenter("playButton")
-      atStart: MovementAction.PEN_UP
       atEnd: MovementAction.PEN_TAP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      from: @getButtonCenter("playButton")
-      to: @getButtonCenter("gearButton")
-      atStart: MovementAction.PEN_UP
+      to: @getButtonCenter("chainButton")
       atEnd: MovementAction.PEN_TAP
       type: MovementType.STRAIGHT
       duration: 3000
     ,
-      from: @getButtonCenter("gearButton")
-      to: new Point(20, 250)
-      atStart: MovementAction.PEN_UP
+      to: new Point(425, 250)
+      type: MovementType.STRAIGHT
+      duration: 1000
+    ,
+      to: new Point(525, 150)
+      atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      from: new Point(20, 250)
+      to: @getButtonCenter("gearButton")
+      atEnd: MovementAction.PEN_TAP
+      type: MovementType.STRAIGHT
+      duration: 1500
+    ,
+      to: new Point(20, 250)
+      type: MovementType.STRAIGHT
+      duration: 1000
+    ,
       to: new Point(650, 300)
+      atStart: MovementAction.PEN_DOWN
+      atEnd: MovementAction.PEN_UP
+      type: MovementType.STRAIGHT
+      duration: 1500
+    ,
+      to: new Point(425, 200)
+      type: MovementType.STRAIGHT
+      duration: 1000
+    ,
+      to: new Point(200, 400)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
@@ -773,6 +742,8 @@ class GearSketch
     # advance movement
     movement = @demoMovements[@currentDemoMovement]
     if @movementCompletion is 0
+      movement.from ?= @pointerLocation
+      movement.pause ?= 500
       @pointerLocation = movement.from.clone()
       if movement.atStart is MovementAction.PEN_DOWN
         @handlePenDown(@pointerLocation.x, @pointerLocation.y)
@@ -786,7 +757,7 @@ class GearSketch
         @handlePenUp()
       else if movement.atEnd is MovementAction.PEN_UP
         @handlePenUp()
-      @restTimer = if movement.noPause? then 0 else 500
+      @restTimer = movement.pause
       @movementCompletion = 0
       @currentDemoMovement++
 
