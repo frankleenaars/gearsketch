@@ -101,6 +101,13 @@ class Chain
   getDistanceToLineSegment: (lineSegment) ->
     Math.min.apply(null, (segment.getDistanceToSegment(lineSegment) for segment in @segments))
 
+  intersectsPath: (path) ->
+    for i in [0...path.length - 1]
+      j = i + 1
+      if @getDistanceToLineSegment(new LineSegment(path[i], path[j])) is 0
+        return true
+    false
+
   distanceToChain: (chain) ->
     minDistance = Number.MAX_VALUE
     for segment in @segments

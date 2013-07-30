@@ -301,11 +301,9 @@ class GearSketch
     image.onload = => @gearImageLoaded(gear.numberOfTeeth, image)
     image.src = gearCanvas.toDataURL("image/png")
 
-  # TODO: should stroke chain intersection be exmined instead?
   removeStrokedChains: (stroke) ->
-    lineSegment = new LineSegment(stroke[0], stroke[stroke.length - 1])
     for own id, chain of @board.getChains()
-      if chain.getDistanceToLineSegment(lineSegment) < Util.EPSILON
+      if chain.intersectsPath(stroke)
         @board.removeChain(chain)
 
   processChainStroke: ->
