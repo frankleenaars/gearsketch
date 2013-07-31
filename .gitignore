@@ -4,4 +4,5 @@
 
 # generated files
 *.js
+!hammer.min.js
 *.map

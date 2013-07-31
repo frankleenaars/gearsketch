@@ -4,7 +4,7 @@
 
 # TODO:
 # - improve icons (inc favicon)
-# - android support
+# - license
 # - disallow chains crossing gears' axes? (if gear on higher level)
 # - allow gears to overlap other gears' axes when the larger gear is on a higher level?
 # - figure out why drawing with RAF is slower than drawing without RAF on iPad
@@ -104,30 +104,23 @@ class GearSketch
 
   # Input callback methods
   addCanvasListeners: ->
-    @addCanvasListener("mousedown", @forwardPenDownEvent)
-    @addCanvasListener("touchstart", @forwardPenDownEvent)
-    @addCanvasListener("mousemove", @forwardPenMoveEvent)
-    @addCanvasListener("touchmove", @forwardPenMoveEvent)
-    @addCanvasListener("mouseup", @forwardPenUpEvent)
-    @addCanvasListener("touchend", @forwardPenUpEvent)
-
-  addCanvasListener: (event, callbackFunction) ->
-    @canvas.addEventListener(event, ((e) => callbackFunction.call(this, e)), false)
+    Hammer(@canvas).on("touch", ((e) => @forwardPenDownEvent.call(this, e)))
+    Hammer(@canvas).on("drag", ((e) => @forwardPenMoveEvent.call(this, e)))
+    Hammer(@canvas).on("release", ((e) => @forwardPenUpEvent.call(this, e)))
 
   forwardPenDownEvent: (event) ->
-    event.preventDefault()
+    event.gesture.preventDefault()
     if @isDemoPlaying
       @stopDemo()
     else
-      @handlePenDown(event.pageX, event.pageY)
+      @handlePenDown(event.gesture.center.pageX, event.gesture.center.pageY)
 
   forwardPenMoveEvent: (event) ->
-    event.preventDefault()
+    event.gesture.preventDefault()
     unless @isDemoPlaying
-      @handlePenMove(event.pageX, event.pageY)
+      @handlePenMove(event.gesture.center.pageX, event.gesture.center.pageY)
 
   forwardPenUpEvent: (event) ->
-    event.preventDefault()
     unless @isDemoPlaying
       @handlePenUp()
 
@@ -482,7 +475,7 @@ class GearSketch
   draw: ->
     if @canvas.getContext?
       @updateCanvasSize()
-      ctx = @canvas.getContext('2d')
+      ctx = @canvas.getContext("2d")
       ctx.clearRect(0, 0, @canvas.width, @canvas.height)
 
       # draw gears

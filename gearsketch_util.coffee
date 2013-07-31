@@ -497,7 +497,7 @@ do ->
 # http://matt.scharley.me/2012/03/09/monkey-patch-name-ie.html
 do ->
   if !Function.prototype.name? and Object.defineProperty?
-    Object.defineProperty(Function.prototype, 'name',
+    Object.defineProperty(Function.prototype, "name",
       get: ->
         funcNameRegex = /function\s([^(]{1,})\(/
         results = (funcNameRegex).exec((this).toString())
