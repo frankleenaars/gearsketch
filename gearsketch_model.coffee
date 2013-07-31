@@ -1,5 +1,6 @@
 # By Frank Leenaars
 # University of Twente - Department of Instructional Technology
+# Licensed under the MIT license
 "use strict"
 
 # imports

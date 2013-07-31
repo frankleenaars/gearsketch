@@ -1,10 +1,10 @@
 # By Frank Leenaars
 # University of Twente - Department of Instructional Technology
+# Licensed under the MIT license
 "use strict"
 
 # TODO:
 # - improve icons (inc favicon)
-# - license
 # - disallow chains crossing gears' axes? (if gear on higher level)
 # - allow gears to overlap other gears' axes when the larger gear is on a higher level?
 # - figure out why drawing with RAF is slower than drawing without RAF on iPad
