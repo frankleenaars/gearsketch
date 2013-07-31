@@ -58,15 +58,15 @@ class ArcSegment
   pointOnCircle: (angle) ->
     @center.plus(Point.polar(angle, @radius))
 
-  doesArcContainAngle: (angle) ->
+  containsAngle: (angle) ->
     if @direction is Util.Direction.CLOCKWISE
       Util.mod(@endAngle - @startAngle, 2 * Math.PI) > Util.mod(angle - @startAngle, 2 * Math.PI)
     else
       Util.mod(@startAngle - @endAngle, 2 * Math.PI) > Util.mod(@startAngle - angle, 2 * Math.PI)
 
-  getDistanceToPoint: (point) ->
+  distanceToPoint: (point) ->
     angle = Math.atan2(point.y - @center.y, point.x - @center.x)
-    if @doesArcContainAngle(angle)
+    if @containsAngle(angle)
       Math.abs(point.distance(@center) - @radius)
     else
       Math.min(point.distance(@start), point.distance(@end))
@@ -89,38 +89,38 @@ class ArcSegment
       i1x = (d * dy + Util.sign(dy) * dx * Math.sqrt(discriminant)) / Math.pow(dr, 2)
       i1y = (-d * dx + Math.abs(dy) * Math.sqrt(discriminant)) / Math.pow(dr, 2)
       i1 = new Point(i1x, i1y).plus(@center)
-      if lineSegment.getDistanceToPoint(i1) < Util.EPSILON and @getDistanceToPoint(i1) < Util.EPSILON
+      if lineSegment.distanceToPoint(i1) < Util.EPSILON and @distanceToPoint(i1) < Util.EPSILON
         return true
       i2x = (d * dy - Util.sign(dy) * dx * Math.sqrt(discriminant)) / Math.pow(dr, 2)
       i2y = (-d * dx - Math.abs(dy) * Math.sqrt(discriminant)) / Math.pow(dr, 2)
       i2 = new Point(i2x, i2y).plus(@center)
-      if lineSegment.getDistanceToPoint(i2) < Util.EPSILON and @getDistanceToPoint(i2) < Util.EPSILON
+      if lineSegment.distanceToPoint(i2) < Util.EPSILON and @distanceToPoint(i2) < Util.EPSILON
         return true
       false
 
   # TODO: fix algorithms (current implementation works for current usage, but is incorrect)
-  getDistanceToSegment: (segment) ->
+  distanceToSegment: (segment) ->
     if segment instanceof ArcSegment
       if @center.distance(segment.center) > Util.EPSILON
         angle1 = Math.atan2(segment.center.y - @center.y, segment.center.x - @center.x)
         angle2 = Util.mod(angle1 + Math.PI, 2 * Math.PI)
-        if @doesArcContainAngle(angle1) and segment.doesArcContainAngle(angle2)
+        if @containsAngle(angle1) and segment.containsAngle(angle2)
           centerDistance = @center.distance(segment.center)
           return Math.max(0, centerDistance - @radius - segment.radius)
-      Math.min(@getDistanceToPoint(segment.start)
-      , @getDistanceToPoint(segment.end)
-      , segment.getDistanceToPoint(@start)
-      , segment.getDistanceToPoint(@end))
+      Math.min(@distanceToPoint(segment.start)
+      , @distanceToPoint(segment.end)
+      , segment.distanceToPoint(@start)
+      , segment.distanceToPoint(@end))
     else # segment is LineSegment
       if @intersectsLineSegment(segment)
         0
       else
         pointNearestToCenter = segment.findNearestPoint(@center)
-        Math.min(@getDistanceToPoint(pointNearestToCenter)
-        , @getDistanceToPoint(segment.start)
-        , @getDistanceToPoint(segment.end)
-        , segment.getDistanceToPoint(@start)
-        , segment.getDistanceToPoint(@end))
+        Math.min(@distanceToPoint(pointNearestToCenter)
+        , @distanceToPoint(segment.start)
+        , @distanceToPoint(segment.end)
+        , segment.distanceToPoint(@start)
+        , segment.distanceToPoint(@end))
 
 
   clone: ->
@@ -155,7 +155,7 @@ class LineSegment
       else
         @start.plus(@end.minus(@start).times(t))
 
-  getDistanceToPoint: (point) ->
+  distanceToPoint: (point) ->
     point.distance(@findNearestPoint(point))
 
   # http://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
@@ -172,18 +172,18 @@ class LineSegment
     else
       null
 
-  getDistanceToSegment: (segment) ->
+  distanceToSegment: (segment) ->
     if segment instanceof LineSegment
       if @findIntersection(segment)
         0
       else
         Math.min(
-          @getDistanceToPoint(segment.start)
-        , @getDistanceToPoint(segment.end)
-        , segment.getDistanceToPoint(@start)
-        , segment.getDistanceToPoint(@end))
+          @distanceToPoint(segment.start)
+        , @distanceToPoint(segment.end)
+        , segment.distanceToPoint(@start)
+        , segment.distanceToPoint(@end))
     else # segment is ArcSegment
-      segment.getDistanceToSegment(this)
+      segment.distanceToSegment(this)
 
   clone: ->
     new LineSegment(@start.clone(), @end.clone())
@@ -200,7 +200,6 @@ class Util
   # -- constants --
   @MODULE: 6
   @AXIS_RADIUS: 1.5 * @MODULE
-  @MIN_GEAR_TEETH: 8
   @MIN_STACKED_GEARS_TEETH_DIFFERENCE: 4
   @SNAPPING_DISTANCE: 2 * @MODULE
   @EPSILON: 0.000001
@@ -236,13 +235,6 @@ class Util
       return copy
 
     throw new Error("Unable to clone object. Its type is not supported.")
-
-  @getEdgeDistance: (gear1, gear2) ->
-    axisDistance = gear1.location.distance(gear2.location)
-    Math.abs(axisDistance - gear1.pitchRadius - gear2.pitchRadius)
-
-  @getDistanceToGear: (p, gear) ->
-    Math.max(0, p.distance(gear.location) - gear.pitchRadius)
 
   @mod: (a, b) ->
     (a % b + b) % b
@@ -313,12 +305,12 @@ class Util
     gear for own id, gear of gears when @isGearInsidePolygon(gear, polygon)
 
   @doesGearIntersectLineSegment: (gear, segment) ->
-    segment.getDistanceToPoint(gear.location) < (gear.pitchRadius + Util.EPSILON)
+    segment.distanceToPoint(gear.location) < (gear.pitchRadius + Util.EPSILON)
 
   @findGearsIntersectingSegment: (gears, segment) ->
     gear for own id, gear of gears when @doesGearIntersectLineSegment(gear, segment)
 
-  @getPointPathDistance: (point, path, isPathClosed = true) ->
+  @pointPathDistance: (point, path, isPathClosed = true) ->
     # using points instead of segments
     distance = Number.MAX_VALUE
     numberOfPoints = path.length
@@ -326,7 +318,7 @@ class Util
     for i in [0...finalIndex]
       j = (i + 1) % numberOfPoints
       segment = new LineSegment(path[i], path[j])
-      d = Math.max(0, segment.getDistanceToPoint(point))
+      d = Math.max(0, segment.distanceToPoint(point))
       distance = Math.min(distance, d)
     distance
 
@@ -335,7 +327,7 @@ class Util
   @findNearestIntersectingGear: (gears, lineSegment, ignoredGearIds = {}) ->
     intersectingGears = @findGearsIntersectingSegment(gears, lineSegment)
     intersectingGears.sort((g1, g2) =>
-      @getDistanceToGear(lineSegment.start, g1) - @getDistanceToGear(lineSegment.start, g2))
+      g1.distanceToPoint(lineSegment.start) - g2.distanceToPoint(lineSegment.start))
     for intersectingGear in intersectingGears
       unless intersectingGear.id of ignoredGearIds
         return intersectingGear
@@ -454,12 +446,12 @@ class Util
     for own neighborId of currentNode.connections
       neighbor = turningObjects[neighborId]
       unless neighbor in nodesVisited
-        nv = nodesVisited.slice(0)
-        nv.push(neighbor)
+        updatedNodesVisited = nodesVisited.slice(0)
+        updatedNodesVisited.push(neighbor)
         if neighbor is goalNode
-          paths.push(nv)
+          paths.push(updatedNodesVisited)
         else
-          paths = paths.concat(@findAllSimplePathsForNodes(turningObjects, goalNode, nv))
+          paths = paths.concat(@findAllSimplePathsForNodes(turningObjects, goalNode, updatedNodesVisited))
     return paths
 
   @findAllSimplePathsBetweenNeighbors: (turningObjects) ->
@@ -474,69 +466,6 @@ class Util
     for i in [0...paths.length]
       paths.push(paths[i].slice(0).reverse())
     paths
-
-  # TEMP
-  @tempRegisterDrawMethod: (object, drawFunction) ->
-    @tempRedraw = ->
-      drawFunction.call(object)
-
-  @tempDrawPath: (path, isPathClosed = false, shouldRedraw = true) ->
-    if shouldRedraw
-      @tempRedraw()
-    canvas = document.getElementById("gearsketch_canvas")
-    ctx = canvas.getContext("2d")
-    ctx.save()
-    ctx.lineWidth = 5
-    ctx.strokeStyle = "red"
-    ctx.beginPath()
-    numberOfPoints = path.length
-    lastPointIndex = path.length - (if isPathClosed then 0 else 1)
-    for i in [0...lastPointIndex]
-      j = (i + 1) % numberOfPoints
-      ctx.moveTo(path[i].x, path[i].y)
-      ctx.lineTo(path[j].x, path[j].y)
-    ctx.stroke()
-    ctx.restore()
-
-  @tempDrawLine: (a, b, shouldRedraw = true) ->
-    if shouldRedraw
-      @tempRedraw()
-    canvas = document.getElementById("gearsketch_canvas")
-    ctx = canvas.getContext("2d")
-    ctx.save()
-    ctx.lineWidth = 5
-    ctx.strokeStyle = "red"
-    ctx.beginPath()
-    ctx.moveTo(a.x, a.y)
-    ctx.lineTo(b.x, b.y)
-    ctx.stroke()
-    ctx.restore()
-
-  @tempDrawCircle: (p, radius = 30, shouldRedraw = true) ->
-    if shouldRedraw
-      @tempRedraw()
-    canvas = document.getElementById("gearsketch_canvas")
-    ctx = canvas.getContext("2d")
-    ctx.save()
-    ctx.lineWidth = 2
-    ctx.strokeStyle = "red"
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, radius, 0, 2 * Math.PI, false)
-    ctx.stroke()
-    ctx.restore()
-
-  @tempDrawPoint: (p, shouldRedraw = true) ->
-    if shouldRedraw
-      @tempRedraw()
-    canvas = document.getElementById("gearsketch_canvas")
-    ctx = canvas.getContext("2d")
-    ctx.save()
-    ctx.fillStyle = "red"
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI, false)
-    ctx.fill()
-    ctx.restore()
-  # END TEMP
 
 window.gearsketch.Util = Util
 

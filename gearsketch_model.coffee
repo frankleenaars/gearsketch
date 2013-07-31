@@ -30,6 +30,13 @@ class Gear
   getCircumference: ->
     2 * Math.PI * @pitchRadius
 
+  distanceToPoint: (point) ->
+    Math.max(0, @location.distance(point) - @pitchRadius)
+
+  edgeDistance: (gear) ->
+    axisDistance = @location.distance(gear.location)
+    Math.abs(axisDistance - @pitchRadius - gear.pitchRadius)
+
   restore: (gear) ->
     @location = gear.location
     @rotation = gear.rotation
@@ -92,31 +99,31 @@ class Chain
     delta = @getLength() / numberOfPoints
     @findPointOnChain(p * delta) for p in [0...numberOfPoints]
 
-  getDistanceToPoint: (point) ->
-    Math.min.apply(null, (segment.getDistanceToPoint(point) for segment in @segments))
+  distanceToPoint: (point) ->
+    Math.min.apply(null, (segment.distanceToPoint(point) for segment in @segments))
 
-  getDistanceToSegment: (s) ->
-    Math.min.apply(null, (segment.getDistanceToSegment(s) for segment in @segments))
+  distanceToSegment: (s) ->
+    Math.min.apply(null, (segment.distanceToSegment(s) for segment in @segments))
 
   distanceToChain: (chain) ->
-    Math.min.apply(null, (chain.getDistanceToSegment(segment) for segment in @segments))
+    Math.min.apply(null, (chain.distanceToSegment(segment) for segment in @segments))
 
   intersectsPath: (path) ->
     for i in [0...path.length - 1]
       j = i + 1
-      if @getDistanceToSegment(new LineSegment(path[i], path[j])) is 0
+      if @distanceToSegment(new LineSegment(path[i], path[j])) is 0
         return true
     false
 
-  doesChainCrossNonSupportingGears: (board) ->
+  crossesNonSupportingGears: (board) ->
     for own id, gear of board.getGears()
       if !(id in @supportingGearIds) and !(id of @ignoredGearIds)
-        if @getDistanceToPoint(gear.location) < gear.pitchRadius + Util.EPSILON
+        if @distanceToPoint(gear.location) < gear.pitchRadius + Util.EPSILON
           return true
     return false
 
   # get the incoming or outgoing tangent point on the gear in @supportingGearIds with the given gearIndex
-  getPointOnSupportingGear: (gearIndex, incoming) ->
+  findPointOnSupportingGear: (gearIndex, incoming) ->
     if incoming
       @points[Util.mod(2 * gearIndex - 1, @points.length)]
     else
@@ -131,9 +138,9 @@ class Chain
       afterIndex = Util.mod((index + 1), numberOfGears)
       acknowledgedGears = board.getAcknowledgedGears(@ignoredGearIds)
       path = [
-        @getPointOnSupportingGear(index, true)
-        @getPointOnSupportingGear(index, false)
-        @getPointOnSupportingGear(afterIndex, true)
+        @findPointOnSupportingGear(index, true)
+        @findPointOnSupportingGear(index, false)
+        @findPointOnSupportingGear(afterIndex, true)
       ]
       replacementGears = @findSupportingGearsOnPath(acknowledgedGears, beforeGear, path, 0, false)
       gears.splice.apply(gears, [index, 1].concat(replacementGears))
@@ -232,7 +239,7 @@ class Chain
     for own id, gear of gears
       group = gear.group
       level = gear.level
-      d = Util.getPointPathDistance(gear.location, @points) - gear.pitchRadius
+      d = Util.pointPathDistance(gear.location, @points) - gear.pitchRadius
       if !minDistances[group]?[level]? or d < minDistances[group][level]
         minDistances[group] ?= {}
         minDistances[group][level] = d
@@ -362,7 +369,7 @@ class Chain
         if i isnt 0 or j isnt numberOfSegments - 1 # don't compare first and last segments
           s1 = updatedSegments[i]
           s2 = updatedSegments[j]
-          if s1.getDistanceToSegment(s2) < Chain.WIDTH
+          if s1.distanceToSegment(s2) < Chain.WIDTH
             # make sure segments are not connected by a very small ArcSegment
             if (i + 2) is j
               middleSegment = updatedSegments[i + 1]
@@ -467,7 +474,7 @@ class Board
   getLevelScore: (gear) ->
     1000 * gear.group + gear.level
 
-  getGearsSortedByGroupsAndLevel: (gears = @getGearList()) ->
+  getGearsSortedByGroupAndLevel: (gears = @getGearList()) ->
     gears.sort((g1, g2) => @getLevelScore(g1) - @getLevelScore(g2))
 
   removeConnection: (turningObject1, turningObject2) ->
@@ -533,7 +540,7 @@ class Board
   findMeshingNeighbors: (gear) ->
     meshingNeighbors = []
     for own candidateId, candidate of @gears
-      if candidate isnt gear and Util.getEdgeDistance(gear, candidate) < EPSILON
+      if candidate isnt gear and gear.edgeDistance(candidate) < EPSILON
         if (candidate.group isnt gear.group) or (candidate.level is gear.level)
           meshingNeighbors.push(candidate)
     meshingNeighbors
@@ -599,7 +606,7 @@ class Board
     shortestEdgeDistance = Number.MAX_VALUE
     for own neighborId, neighbor of @gears
       if neighbor isnt gear and !(neighborId of gearIdsToIgnore)
-        edgeDistance = Util.getEdgeDistance(gear, neighbor)
+        edgeDistance = gear.edgeDistance(neighbor)
         if edgeDistance < shortestEdgeDistance
           nearestNeighbor = neighbor
           shortestEdgeDistance = edgeDistance
@@ -625,7 +632,7 @@ class Board
     # check whether meshing gears are close enough to each other and not
     # on top of each other; connect gear to closest meshing gear otherwise
     if r0 + r1 < d or p0.distance(p1) < EPSILON
-      if Util.getEdgeDistance(gear, meshingGear1) < Util.getEdgeDistance(gear, meshingGear2)
+      if gear.edgeDistance(meshingGear1) < gear.edgeDistance(meshingGear2)
         @connectToOneMeshingGear(gear, meshingGear1)
         return
       else
@@ -655,7 +662,7 @@ class Board
 
   doChainsCrossNonSupportingGears: ->
     for own id, chain of @chains
-      if chain.doesChainCrossNonSupportingGears(this)
+      if chain.crossesNonSupportingGears(this)
         return true
     false
 
@@ -766,10 +773,10 @@ class Board
       @connectToAxis(gear, nearestAxis)
     else
       neighbor1 = @findNearestNeighbor(gear)
-      if neighbor1 and Util.getEdgeDistance(gear, neighbor1) < SNAPPING_DISTANCE
+      if neighbor1 and gear.edgeDistance(neighbor1) < SNAPPING_DISTANCE
         # make gear mesh with one or two neighbors
         neighbor2 = @findNearestNeighbor(gear, Util.makeSet(neighbor1.id))
-        if neighbor2 and Util.getEdgeDistance(gear, neighbor2) < SNAPPING_DISTANCE
+        if neighbor2 and gear.edgeDistance(neighbor2) < SNAPPING_DISTANCE
           @connectToTwoMeshingGears(gear, neighbor1, neighbor2)
         else
           @connectToOneMeshingGear(gear, neighbor1)
@@ -850,7 +857,7 @@ class Board
   rotateAllTurningObjects: (delta) ->
     for own id, gear of @gears
       if gear.momentum
-        angle = gear.momentum * delta
+        angle = gear.momentum * (delta / 1000)
         @rotateTurningObjectsFrom(gear, angle, {})
 
   addChainConnections: (chain) ->

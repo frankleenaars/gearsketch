@@ -4,10 +4,9 @@
 
 # TODO:
 # - improve icons (inc favicon)
-# - use makeSet where appropriate
-# - clean up get / find names
-# - prevent gear axis crossing chain? (if gear on higher level, lower level is no problem?)
-# - allow gears to overlap other gears' axes if they are on a higher level?
+# - android support
+# - disallow chains crossing gears' axes? (if gear on higher level)
+# - allow gears to overlap other gears' axes when the larger gear is on a higher level?
 # - figure out why drawing with RAF is slower than drawing without RAF on iPad
 
 # imports
@@ -21,6 +20,8 @@ Board = window.gearsketch.model.Board
 
 # -- constants --
 FPS = 60
+MIN_GEAR_TEETH = 8
+MIN_MOMENTUM = 0.2
 
 # ---------------------------
 # -------- GearSketch -------
@@ -29,7 +30,6 @@ class GearSketch
   # -- imported constants --
   MODULE = Util.MODULE
   AXIS_RADIUS = Util.AXIS_RADIUS
-  MIN_GEAR_TEETH = Util.MIN_GEAR_TEETH
 
   BUTTON_INFO = [
     ["gearButton", "GearIcon.png"]
@@ -79,7 +79,6 @@ class GearSketch
     @lastUpdateTime = new Date().getTime()
     #@updateAndDraw()
     @updateAndDrawNoRAF()
-    Util.tempRegisterDrawMethod(this, @draw)
 
   buttonLoaded: ->
     @loadedButtons++
@@ -145,7 +144,6 @@ class GearSketch
         else
           @selectedButton = button.name
       else if @selectedButton is "gearButton"
-        #@selectedGear = @board.getGearAt(point)
         @selectedGear = @board.getTopLevelGearAt(point)
         if @selectedGear?
           @offset = point.minus(@selectedGear.location)
@@ -191,7 +189,6 @@ class GearSketch
         @processChainStroke()
       else if @selectedButton is "momentumButton"
         if @selectedGear
-          MIN_MOMENTUM = 0.2
           if Math.abs(@selectedGearMomentum) > MIN_MOMENTUM
             @selectedGear.momentum = @selectedGearMomentum
           else
@@ -226,7 +223,8 @@ class GearSketch
     normalizedStroke
 
   createGearFromStroke: (stroke) ->
-    if stroke.length > 0
+    numberOfPoints = stroke.length
+    if numberOfPoints > 0
       sumX = 0
       sumY = 0
       minX = Number.MAX_VALUE
@@ -247,8 +245,8 @@ class GearSketch
       # find area, based on http://stackoverflow.com/questions/451426
       # /how-do-i-calculate-the-surface-area-of-a-2d-polygon
       doubleArea = 0
-      for i in [0...stroke.length]
-        j = (i + 1) % stroke.length
+      for i in [0...numberOfPoints]
+        j = (i + 1) % numberOfPoints
         doubleArea += stroke[i].x * stroke[j].y
         doubleArea -= stroke[i].y * stroke[j].x
 
@@ -257,14 +255,14 @@ class GearSketch
       radius = 0.25 * ((maxX - minX) + (maxY - minY))
       idealTrueAreaRatio = (Math.PI * Math.pow(radius, 2)) / area
       if idealTrueAreaRatio > 0.80 and idealTrueAreaRatio < 1.20 and t > MIN_GEAR_TEETH
-        x = sumX / stroke.length
-        y = sumY / stroke.length
+        x = sumX / numberOfPoints
+        y = sumY / numberOfPoints
         return new Gear(new Point(x, y), 0, t)
     null
 
   removeStrokedGears: (stroke) ->
     for own id, gear of @board.getTopLevelGears()
-      if Util.getPointPathDistance(gear.location, stroke, false) < gear.innerRadius
+      if Util.pointPathDistance(gear.location, stroke, false) < gear.innerRadius
         @board.removeGear(gear)
 
   processGearStroke: ->
@@ -336,7 +334,7 @@ class GearSketch
     updateTime = new Date().getTime()
     delta = updateTime - @lastUpdateTime
     if @selectedButton is "playButton"
-      @board.rotateAllTurningObjects(delta / 1000)
+      @board.rotateAllTurningObjects(delta)
     if @isDemoPlaying
       @updateDemo(delta)
     @lastUpdateTime = updateTime
@@ -368,7 +366,6 @@ class GearSketch
           innerPoints.push(Point.polar((i + 0.25 * r) * angleStep, gear.innerRadius))
         else
           outerPoints.push(Point.polar((i + 0.25 * r) * angleStep, gear.outerRadius))
-
     ctx.save()
     ctx.fillStyle = "rgba(255, 255, 255, 0.8)"
     ctx.strokeStyle = color
@@ -441,7 +438,7 @@ class GearSketch
     headX = -Math.cos(momentum + 0.5 * Math.PI) * pitchRadius
     headY = pitchRadius - Math.sin(momentum + 0.5 * Math.PI) * pitchRadius
     head = new Point(headX, headY)
-    sign = momentum / Math.abs(momentum)
+    sign = Util.sign(momentum)
     p1 = head.minus(Point.polar(momentum + angle, sign * length))
     ctx.beginPath()
     ctx.moveTo(headX, headY)
@@ -489,7 +486,7 @@ class GearSketch
       ctx.clearRect(0, 0, @canvas.width, @canvas.height)
 
       # draw gears
-      sortedGears = @board.getGearsSortedByGroupsAndLevel()
+      sortedGears = @board.getGearsSortedByGroupAndLevel()
       arrowsToDraw = []
       for i in [0...sortedGears.length]
         gear = sortedGears[i]
