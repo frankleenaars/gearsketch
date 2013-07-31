@@ -104,9 +104,10 @@ class GearSketch
 
   # Input callback methods
   addCanvasListeners: ->
-    Hammer(@canvas).on("touch", ((e) => @forwardPenDownEvent.call(this, e)))
-    Hammer(@canvas).on("drag", ((e) => @forwardPenMoveEvent.call(this, e)))
-    Hammer(@canvas).on("release", ((e) => @forwardPenUpEvent.call(this, e)))
+    canvasEventHandler = Hammer(@canvas, {drag_min_distance: 1})
+    canvasEventHandler.on("touch", ((e) => @forwardPenDownEvent.call(this, e)))
+    canvasEventHandler.on("drag", ((e) => @forwardPenMoveEvent.call(this, e)))
+    canvasEventHandler.on("release", ((e) => @forwardPenUpEvent.call(this, e)))
 
   forwardPenDownEvent: (event) ->
     event.gesture.preventDefault()
