@@ -821,12 +821,5 @@ class GearSketch
   uploadBoard: ->
     boardJSON = JSON.stringify(@board)
     Util.sendPostRequest(boardJSON, "upload_board.php", ((event) => @boardUploaded(event)))
-#    request = new XMLHttpRequest()
-#    request.open("POST", "upload_board.php", true)
-#    request.setRequestHeader("Content-type", "application/json; charset=UTF-8")
-#    request.onload =
-#    request.send(boardJSON)
-
-
 
 window.gearsketch.GearSketch = GearSketch
