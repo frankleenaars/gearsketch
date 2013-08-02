@@ -3,6 +3,8 @@
 *.iml
 
 # generated files
-*.js
-!hammer.min.js
-*.map
+site/*.map
+site/*.coffee
+
+# board files
+site/boards/*

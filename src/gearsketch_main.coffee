@@ -4,7 +4,7 @@
 "use strict"
 
 # TODO:
-# - improve icons (inc favicon)
+# - improve icons
 # - disallow chains crossing gears' axes? (if gear on higher level)
 # - allow gears to overlap other gears' axes when the larger gear is on a higher level?
 # - figure out why drawing with RAF is slower than drawing without RAF on iPad
@@ -36,6 +36,8 @@ class GearSketch
     ["chainButton", "ChainIcon.png"]
     ["momentumButton", "MomentumIcon.png"]
     ["playButton", "PlayIcon.png"]
+    ["clearButton", "ClearIcon.png"]
+    ["cloudButton", "CloudIcon.png"]
     ["helpButton", "HelpIcon.png"]
   ]
 
@@ -61,7 +63,8 @@ class GearSketch
   stroke: []
   offset: new Point()
 
-  board: new Board()
+  message: ""
+  messageColor: "black"
 
   # usage demo
   pointerLocation: new Point()
@@ -72,6 +75,7 @@ class GearSketch
   constructor: ->
     @loadButtons()
     @loadDemoPointer()
+    @loadBoard()
     @canvas = document.getElementById("gearsketch_canvas")
     @isDemoPlaying = false
     @updateCanvasSize()
@@ -101,6 +105,27 @@ class GearSketch
     image = new Image()
     image.onload = => @pointerImage = image
     image.src = "img/hand.png"
+
+  loadBoard: ->
+    if parent.location.hash.length > 1
+      try
+        hash = parent.location.hash.substr(1)
+        boardJSON = Util.sendGetRequest("boards/#{hash}.txt")
+        @board = Board.fromObject(JSON.parse(boardJSON))
+      catch error
+        @displayMessage("Error: could not load board", "red", 2000)
+        @board = new Board()
+    else
+      @board = new Board()
+
+  displayMessage: (message, color = "black", time = 0) ->
+    @message = message
+    @messageColor = color
+    if time > 0
+      setTimeout((=> @clearMessage()), time)
+
+  clearMessage: ->
+    @message = ""
 
   # Input callback methods
   addCanvasListeners: ->
@@ -133,7 +158,13 @@ class GearSketch
     else
       button = @getButtonAt(x, y)
       if button
-        if button.name is "helpButton"
+        if button.name is "clearButton"
+          # remove hash from url and clear board
+          parent.location.hash = ""
+          @board.clear()
+        else if button.name is "cloudButton"
+          @uploadBoard()
+        else if button.name is "helpButton"
           @playDemo()
         else
           @selectedButton = button.name
@@ -534,20 +565,24 @@ class GearSketch
         for own buttonName of @buttons
           @drawButton(ctx, @buttons[buttonName])
 
+      # draw message
+      if @message.length > 0
+        ctx.save()
+        ctx.fillStyle = @messageColor
+        ctx.font = "bold 20px Arial"
+        ctx.fillText(@message, 20, 120)
+        ctx.restore()
+
       # draw demo text and pointer
       if @isDemoPlaying and @pointerImage
-        ctx.save()
-        ctx.fillStyle = "black"
-        ctx.font = "bold 20px Arial"
-        ctx.fillText("click anywhere to stop the demonstration", 20, 120)
         @drawDemoPointer(ctx, @pointerLocation)
-        ctx.restore()
 
   updateCanvasSize: () ->
     @canvas.width = window.innerWidth
     @canvas.height = window.innerHeight
-    @buttons["helpButton"].location.x =
-      Math.max(@canvas.width - 100, @buttons["playButton"].location.x + 80)
+    @buttons["clearButton"].location.x = Math.max(@canvas.width - 260, @buttons["playButton"].location.x + 80)
+    @buttons["cloudButton"].location.x = @buttons["clearButton"].location.x + 80
+    @buttons["helpButton"].location.x = @buttons["cloudButton"].location.x + 80
 
   # -- usage demo --
   loadDemoMovements: ->
@@ -764,10 +799,11 @@ class GearSketch
   playDemo: ->
     @loadDemoMovements() # load these on each play in case canvas size changed
     @boardBackup = @board.clone()
-    @board.clearBoard()
+    @board.clear()
     @currentDemoMovement = 0
     @movementCompletion = 0
     @isDemoPlaying = true
+    @displayMessage("click anywhere to stop the demo")
 
   stopDemo: ->
     @isDemoPlaying = false
@@ -775,6 +811,22 @@ class GearSketch
     @stroke = []
     @selectedGear = null
     @selectedIcon = "gearIcon"
-    @board.restoreBoardAfterDemo(@boardBackup)
+    @board.restoreAfterDemo(@boardBackup)
+    @clearMessage()
+
+  boardUploaded: (event) ->
+    parent.location.hash = event.srcElement.responseText.trim()
+    @displayMessage("Board saved. Share it by copying the text in your address bar.", "black", 4000)
+
+  uploadBoard: ->
+    boardJSON = JSON.stringify(@board)
+    Util.sendPostRequest(boardJSON, "upload_board.php", ((event) => @boardUploaded(event)))
+#    request = new XMLHttpRequest()
+#    request.open("POST", "upload_board.php", true)
+#    request.setRequestHeader("Content-type", "application/json; charset=UTF-8")
+#    request.onload =
+#    request.send(boardJSON)
+
+
 
 window.gearsketch.GearSketch = GearSketch

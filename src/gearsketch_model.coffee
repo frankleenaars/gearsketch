@@ -15,15 +15,9 @@ window.gearsketch.model = {}
 # ---------- Gear -----------
 # ---------------------------
 class Gear
-  nextGearId = 0
-
-  constructor: (@location, @rotation, @numberOfTeeth, id,
+  constructor: (@location, @rotation, @numberOfTeeth, @id,
                 @momentum = 0, @group = 0, @level = 0, @connections = {}) ->
-    if id?
-      @id = id
-    else
-      @id = "g#{nextGearId}"
-      nextGearId++
+    @id ?= Util.createUUID()
     @pitchRadius = Util.MODULE * (0.5 * @numberOfTeeth)
     @innerRadius = Util.MODULE * (0.5 * @numberOfTeeth - 1.25)
     @outerRadius = Util.MODULE * (0.5 * @numberOfTeeth + 1)
@@ -50,6 +44,10 @@ class Gear
     new Gear(@location.clone(), @rotation, @numberOfTeeth, @id,
       @momentum, @group, @level, Util.clone(@connections))
 
+  @fromObject: (obj) ->
+    new Gear(Point.fromObject(obj.location), obj.rotation, obj.numberOfTeeth, obj.id,
+      obj.momentum, obj.group, obj.level, obj.connections)
+
 window.gearsketch.model.Gear = Gear
 
 # ---------------------------
@@ -58,17 +56,11 @@ window.gearsketch.model.Gear = Gear
 class Chain
   @WIDTH: 8
 
-  nextChainId = 0
-
   points: []
   segments: []
 
-  constructor: (stroke, id, @group = 0, @level = 0, @connections = {}) ->
-    if id?
-      @id = id
-    else
-      @id = "c#{nextChainId}"
-      nextChainId++
+  constructor: (stroke, @id, @group = 0, @level = 0, @connections = {}) ->
+    @id ?= Util.createUUID()
     @points = Util.clone(stroke)
     @rotation = 0
 
@@ -420,6 +412,17 @@ class Chain
     copy.supportingGearIds = Util.clone(@supportingGearIds)
     copy
 
+  @fromObject: (obj) ->
+    createSegment = (obj) -> if obj.center? then ArcSegment.fromObject(obj) else LineSegment.fromObject(obj)
+    points = (new Point(p.x, p.y) for p in obj.points)
+    chain = new Chain(points, obj.id, obj.group, obj.level, obj.connections)
+    chain.segments = (createSegment(segment) for segment in obj.segments)
+    chain.ignoredGearIds = obj.ignoredGearIds
+    chain.innerGearIds = obj.innerGearIds
+    chain.direction = obj.direction
+    chain.supportingGearIds = obj.supportingGearIds
+    chain
+
 window.gearsketch.model.Chain = Chain
 
 # ---------------------------
@@ -442,16 +445,16 @@ class Board
 
   constructor: (@gears = {}, @chains = {}) ->
 
-  restoreBoard: (board) ->
+  restore: (board) ->
     for own id, gear of @gears
       gear.restore(board.gears[id])
     @chains = board.chains
 
-  restoreBoardAfterDemo: (board) ->
+  restoreAfterDemo: (board) ->
     @gears = board.gears
     @chains = board.chains
 
-  clearBoard: ->
+  clear: ->
     @gears = {}
     @chains = {}
 
@@ -787,14 +790,14 @@ class Board
       if chain.update(this)
         @updateChainConnections(chain)
       else
-        @restoreBoard(oldBoard)
+        @restore(oldBoard)
         return false
 
     # check if board is valid
     if @isBoardValid()
       true
     else
-      @restoreBoard(oldBoard)
+      @restore(oldBoard)
       false
 
   addGearToChains: (gear) ->
@@ -816,7 +819,7 @@ class Board
     @addGearToChains(gear)
     if !@placeGear(gear, gear.location)
       @removeGear(gear)
-      @restoreBoard(oldBoard)
+      @restore(oldBoard)
       false
     else
       true
@@ -879,12 +882,12 @@ class Board
       @chains[chain.id] = chain
       @addChainConnections(chain)
     else
-      @restoreBoard(oldBoard)
+      @restore(oldBoard)
       return false
     if @isBoardValid()
       true
     else
-      @restoreBoard(oldBoard)
+      @restore(oldBoard)
       false
 
   removeChain: (chain) ->
@@ -906,5 +909,13 @@ class Board
   clone: ->
     gears: Util.clone(@gears)
     chains: Util.clone(@chains)
+
+  @fromObject: (obj) ->
+    board = new Board()
+    for id, gear of obj.gears
+      board.gears[id] = Gear.fromObject(gear)
+    for id, chain of obj.chains
+      board.chains[id] = Chain.fromObject(chain)
+    board
 
 window.gearsketch.model.Board = Board

@@ -32,6 +32,9 @@ class Point
   @polar: (theta, r) ->
     new Point(r * Math.cos(theta), r * Math.sin(theta))
 
+  @fromObject: (obj) ->
+    new Point(obj.x, obj.y)
+
 window.gearsketch.Point = Point
 
 # ---------------------------
@@ -123,9 +126,11 @@ class ArcSegment
         , segment.distanceToPoint(@start)
         , segment.distanceToPoint(@end))
 
-
   clone: ->
     new ArcSegment(@center.clone(), @radius, @startAngle, @endAngle, @direction)
+
+  @fromObject: (obj) ->
+    new ArcSegment(Point.fromObject(obj.center), obj.radius, obj.startAngle, obj.endAngle, obj.direction)
 
 window.gearsketch.ArcSegment = ArcSegment
 
@@ -189,6 +194,9 @@ class LineSegment
   clone: ->
     new LineSegment(@start.clone(), @end.clone())
 
+  @fromObject: (obj) ->
+    new LineSegment(Point.fromObject(obj.start), Point.fromObject(obj.end))
+
 window.gearsketch.LineSegment = LineSegment
 
 # ---------------------------
@@ -236,6 +244,13 @@ class Util
       return copy
 
     throw new Error("Unable to clone object. Its type is not supported.")
+
+  # http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript
+  @createUUID: ->
+    "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) ->
+      r = Math.random() * 16 | 0
+      v = if c is "x" then r else (r & 0x3 | 0x8)
+      v.toString(16))
 
   @mod: (a, b) ->
     (a % b + b) % b
@@ -467,6 +482,19 @@ class Util
     for i in [0...paths.length]
       paths.push(paths[i].slice(0).reverse())
     paths
+
+  @sendGetRequest: (url) ->
+    request = new XMLHttpRequest()
+    request.open("GET", url, false)
+    request.send(null)
+    request.responseText
+
+  @sendPostRequest: (data, url, callback) ->
+    request = new XMLHttpRequest()
+    request.open("POST", url, true)
+    request.setRequestHeader("Content-type", "application/json; charset=UTF-8")
+    request.onload = callback
+    request.send(data)
 
 window.gearsketch.Util = Util
 
