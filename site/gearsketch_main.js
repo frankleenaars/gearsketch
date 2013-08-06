@@ -131,19 +131,21 @@
 
     GearSketch.prototype.loadBoard = function() {
       var boardJSON, error, hash;
-      if (parent.location.hash.length > 1) {
-        try {
-          hash = parent.location.hash.substr(1);
-          boardJSON = Util.sendGetRequest("boards/" + hash + ".txt");
-          return this.board = Board.fromObject(JSON.parse(boardJSON));
-        } catch (_error) {
-          error = _error;
-          this.displayMessage("Error: could not load board", "red", 2000);
-          return this.board = new Board();
+      return this.board = (function() {
+        if (parent.location.hash.length > 1) {
+          try {
+            hash = parent.location.hash.substr(1);
+            boardJSON = Util.sendGetRequest("boards/" + hash + ".txt");
+            return Board.fromObject(JSON.parse(boardJSON));
+          } catch (_error) {
+            error = _error;
+            this.displayMessage("Error: could not load board", "red", 2000);
+            return new Board();
+          }
+        } else {
+          return new Board();
         }
-      } else {
-        return this.board = new Board();
-      }
+      }).call(this);
     };
 
     GearSketch.prototype.displayMessage = function(message, color, time) {
@@ -985,7 +987,7 @@
     };
 
     GearSketch.prototype.boardUploaded = function(event) {
-      parent.location.hash = event.srcElement.responseText.trim();
+      parent.location.hash = event.target.responseText.trim();
       return this.displayMessage("Board saved. Share it by copying the text in your address bar.", "black", 4000);
     };
 

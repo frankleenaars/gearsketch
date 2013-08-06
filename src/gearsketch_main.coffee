@@ -4,6 +4,8 @@
 "use strict"
 
 # TODO:
+# - use "for element, i in ..." where appropriate
+# - chained comparisons: 1 < x < 100
 # - improve icons
 # - disallow chains crossing gears' axes? (if gear on higher level)
 # - allow gears to overlap other gears' axes when the larger gear is on a higher level?
@@ -107,16 +109,17 @@ class GearSketch
     image.src = "img/hand.png"
 
   loadBoard: ->
-    if parent.location.hash.length > 1
-      try
-        hash = parent.location.hash.substr(1)
-        boardJSON = Util.sendGetRequest("boards/#{hash}.txt")
-        @board = Board.fromObject(JSON.parse(boardJSON))
-      catch error
-        @displayMessage("Error: could not load board", "red", 2000)
-        @board = new Board()
-    else
-      @board = new Board()
+    @board =
+      if parent.location.hash.length > 1
+        try
+          hash = parent.location.hash.substr(1)
+          boardJSON = Util.sendGetRequest("boards/#{hash}.txt")
+          Board.fromObject(JSON.parse(boardJSON))
+        catch error
+          @displayMessage("Error: could not load board", "red", 2000)
+          new Board()
+      else
+        new Board()
 
   displayMessage: (message, color = "black", time = 0) ->
     @message = message
@@ -815,7 +818,7 @@ class GearSketch
     @clearMessage()
 
   boardUploaded: (event) ->
-    parent.location.hash = event.srcElement.responseText.trim()
+    parent.location.hash = event.target.responseText.trim()
     @displayMessage("Board saved. Share it by copying the text in your address bar.", "black", 4000)
 
   uploadBoard: ->
