@@ -79,6 +79,8 @@ class GearSketch
     @loadDemoPointer()
     @loadBoard()
     @canvas = document.getElementById("gearsketch_canvas")
+    @canvasOffsetX = @canvas.getBoundingClientRect().left
+    @canvasOffsetY = @canvas.getBoundingClientRect().top
     @isDemoPlaying = false
     @updateCanvasSize()
     @addCanvasListeners()
@@ -142,12 +144,16 @@ class GearSketch
     if @isDemoPlaying
       @stopDemo()
     else
-      @handlePenDown(event.gesture.center.pageX, event.gesture.center.pageY)
+      x = event.gesture.center.pageX - @canvasOffsetX
+      y = event.gesture.center.pageY - @canvasOffsetY
+      @handlePenDown(x, y)
 
   forwardPenMoveEvent: (event) ->
     event.gesture.preventDefault()
     unless @isDemoPlaying
-      @handlePenMove(event.gesture.center.pageX, event.gesture.center.pageY)
+      x = event.gesture.center.pageX - @canvasOffsetX
+      y = event.gesture.center.pageY - @canvasOffsetY
+      @handlePenMove(x, y)
 
   forwardPenUpEvent: (event) ->
     unless @isDemoPlaying
@@ -581,8 +587,8 @@ class GearSketch
         @drawDemoPointer(ctx, @pointerLocation)
 
   updateCanvasSize: () ->
-    @canvas.width = window.innerWidth
-    @canvas.height = window.innerHeight
+    @canvas.width = @canvas.parentElement.getBoundingClientRect().width
+    @canvas.height = @canvas.parentElement.getBoundingClientRect().height
     @buttons["clearButton"].location.x = Math.max(@canvas.width - 260, @buttons["playButton"].location.x + 80)
     @buttons["cloudButton"].location.x = @buttons["clearButton"].location.x + 80
     @buttons["helpButton"].location.x = @buttons["cloudButton"].location.x + 80
