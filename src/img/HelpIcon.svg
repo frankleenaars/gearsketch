@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   height="55px"
+   viewBox="0 0 55 55"
+   width="55px"
+   id="svg2"
+   version="1.1"
+   inkscape:version="0.48.4 r9939"
+   sodipodi:docname="HelpIcon.svg"
+   inkscape:export-filename="/home/manuq/prog/gearsketch/site/img/HelpIcon.png"
+   inkscape:export-xdpi="104.72727"
+   inkscape:export-ydpi="104.72727">
+  <metadata
+     id="metadata12">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <defs
+     id="defs10" />
+  <sodipodi:namedview
+     pagecolor="#00ffff"
+     bordercolor="#666666"
+     borderopacity="1"
+     objecttolerance="10"
+     gridtolerance="10"
+     guidetolerance="10"
+     inkscape:pageopacity="0"
+     inkscape:pageshadow="2"
+     inkscape:window-width="1024"
+     inkscape:window-height="541"
+     id="namedview8"
+     showgrid="true"
+     inkscape:zoom="4.2909091"
+     inkscape:cx="27.5"
+     inkscape:cy="27.5"
+     inkscape:window-x="0"
+     inkscape:window-y="27"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg2">
+    <inkscape:grid
+       type="xygrid"
+       id="grid2989"
+       empspacing="5"
+       visible="true"
+       enabled="true"
+       snapvisiblegridlinesonly="true"
+       spacingx="11px"
+       spacingy="11px" />
+  </sodipodi:namedview>
+  <g
+     id="g4"
+     style="fill:#000000">
+    <path
+       d="M27.5,50.125 C15.157,50.125 5,39.968 5,27.625 C5,15.282     15.157,5.125 27.5,5.125 C39.843,5.125 50,15.282 50,27.625     C49.837,40.071 40.412,49.484 28.077,50.118 z M27.01,34.768     C28.452,34.839 29.871,34.056 30.301,32.622 C30.538,31.831     30.438,30.811 30.438,30.048 C32.901,29.422 35.315,28.194     36.775,26.041 C38.635,23.299 38.692,19.361 37.139,16.471     C35.241,12.938 31.3,11.4 27.467,11.326 C25.327,11.363     23.184,11.958 21.331,13.036 C19.004,14.391 16.92,16.931     17.59,19.785 C17.767,20.537 18.189,21.24 18.866,21.638     C21.301,23.068 23.001,20.116 24.478,18.753 C25.357,17.943     26.602,17.383 27.82,17.553 C29.264,17.754 30.642,18.618     31.073,20.071 C31.224,20.581 31.229,21.118 31.155,21.642     C30.908,23.4 29.517,24.191 27.938,24.685 C26.56,25.116     24.024,25.251 23.956,27.167 L23.957,27.167 L23.957,31.667     C23.947,33.36 25.073,34.466 26.649,34.738 z M27.016,44.444     C28.993,44.54 30.706,42.921 30.706,40.937 C30.706,38.99     29.106,37.475 27.196,37.427 C25.253,37.431 23.54,39.139     23.691,41.117 C23.823,42.857 24.98,44.062 26.662,44.408 z"
+       id="path6"
+       style="fill:#000000" />
+  </g>
+  <g
+     style="fill:#000000"
+     id="g2991">
+    <path
+       style="fill:#ffffff;stroke:none"
+       id="path2993"
+       d="m 27.01,34.768 c 1.442,0.071 2.861,-0.712 3.291,-2.146 0.237,-0.791 0.137,-1.811 0.137,-2.574 2.463,-0.626 4.877,-1.854 6.337,-4.007 1.86,-2.742 1.917,-6.68 0.364,-9.57 -1.898,-3.533 -5.839,-5.071 -9.672,-5.145 -2.14,0.037 -4.283,0.632 -6.136,1.71 -2.327,1.355 -4.411,3.895 -3.741,6.749 0.177,0.752 0.599,1.455 1.276,1.853 2.435,1.43 4.135,-1.522 5.612,-2.885 0.879,-0.81 2.124,-1.37 3.342,-1.2 1.444,0.201 2.822,1.065 3.253,2.518 0.151,0.51 0.156,1.047 0.082,1.571 -0.247,1.758 -1.638,2.549 -3.217,3.043 -1.378,0.431 -3.914,0.566 -3.982,2.482 l 0.001,0 0,4.5 c -0.01,1.693 1.116,2.799 2.692,3.071 z m 0.006,9.676 c 1.977,0.096 3.69,-1.523 3.69,-3.507 0,-1.947 -1.6,-3.462 -3.51,-3.51 -1.943,0.004 -3.656,1.712 -3.505,3.69 0.132,1.74 1.289,2.945 2.971,3.291 z"
+       inkscape:connector-curvature="0"
+       sodipodi:nodetypes="ccccccccccccccccccccscccc" />
+  </g>
+</svg>
