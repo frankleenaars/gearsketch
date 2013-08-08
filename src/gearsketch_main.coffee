@@ -440,7 +440,21 @@ class GearSketch
     ctx.save()
     ctx.translate(x, y)
     ctx.beginPath()
-    ctx.rect(0, 0, button.width + 2 * padding, button.height + 2 * padding)
+
+    # draw a round rectangle
+    radius = 5
+    width = button.width + 2 * padding
+    height = button.height + 2 * padding
+    ctx.moveTo(radius, 0)
+    ctx.lineTo(width - radius, 0)
+    ctx.quadraticCurveTo(width, 0, width, radius)
+    ctx.lineTo(width, height - radius)
+    ctx.quadraticCurveTo(width, height, width - radius, height)
+    ctx.lineTo(radius, height)
+    ctx.quadraticCurveTo(0, height, 0, height - radius);
+    ctx.lineTo(0, radius)
+    ctx.quadraticCurveTo(0, 0, radius, 0);
+
     if button.name is @selectedButton
       ctx.fillStyle = "rgba(50, 150, 255, 0.8)"
     else
