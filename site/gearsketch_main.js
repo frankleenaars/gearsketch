@@ -84,6 +84,8 @@
       this.loadDemoPointer();
       this.loadBoard();
       this.canvas = document.getElementById("gearsketch_canvas");
+      this.canvasOffsetX = this.canvas.getBoundingClientRect().left;
+      this.canvasOffsetY = this.canvas.getBoundingClientRect().top;
       this.isDemoPlaying = false;
       this.updateCanvasSize();
       this.addCanvasListeners();
@@ -187,18 +189,24 @@
     };
 
     GearSketch.prototype.forwardPenDownEvent = function(event) {
+      var x, y;
       event.gesture.preventDefault();
       if (this.isDemoPlaying) {
         return this.stopDemo();
       } else {
-        return this.handlePenDown(event.gesture.center.pageX, event.gesture.center.pageY);
+        x = event.gesture.center.pageX - this.canvasOffsetX;
+        y = event.gesture.center.pageY - this.canvasOffsetY;
+        return this.handlePenDown(x, y);
       }
     };
 
     GearSketch.prototype.forwardPenMoveEvent = function(event) {
+      var x, y;
       event.gesture.preventDefault();
       if (!this.isDemoPlaying) {
-        return this.handlePenMove(event.gesture.center.pageX, event.gesture.center.pageY);
+        x = event.gesture.center.pageX - this.canvasOffsetX;
+        y = event.gesture.center.pageY - this.canvasOffsetY;
+        return this.handlePenMove(x, y);
       }
     };
 
@@ -731,8 +739,8 @@
     };
 
     GearSketch.prototype.updateCanvasSize = function() {
-      this.canvas.width = window.innerWidth;
-      this.canvas.height = window.innerHeight;
+      this.canvas.width = this.canvas.parentElement.getBoundingClientRect().width;
+      this.canvas.height = this.canvas.parentElement.getBoundingClientRect().height;
       this.buttons["clearButton"].location.x = Math.max(this.canvas.width - 260, this.buttons["playButton"].location.x + 80);
       this.buttons["cloudButton"].location.x = this.buttons["clearButton"].location.x + 80;
       return this.buttons["helpButton"].location.x = this.buttons["cloudButton"].location.x + 80;
