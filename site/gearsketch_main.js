@@ -175,6 +175,10 @@
       return this.message = "";
     };
 
+    GearSketch.prototype.selectButton = function(buttonName) {
+      return this.selectedButton = buttonName;
+    };
+
     GearSketch.prototype.shouldShowButtons = function() {
       return this.showButtons || this.isDemoPlaying;
     };
@@ -240,7 +244,7 @@
           } else if (button.name === "helpButton") {
             return this.playDemo();
           } else {
-            return this.selectedButton = button.name;
+            return this.selectButton(button.name);
           }
         } else if (this.selectedButton === "gearButton") {
           this.selectedGear = this.board.getTopLevelGearAt(point);

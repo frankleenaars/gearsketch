@@ -135,6 +135,9 @@ class GearSketch
   clearMessage: ->
     @message = ""
 
+  selectButton: (buttonName) ->
+    @selectedButton = buttonName
+
   shouldShowButtons: ->
     return @showButtons or @isDemoPlaying
 
@@ -182,7 +185,7 @@ class GearSketch
         else if button.name is "helpButton"
           @playDemo()
         else
-          @selectedButton = button.name
+          @selectButton(button.name)
       else if @selectedButton is "gearButton"
         @selectedGear = @board.getTopLevelGearAt(point)
         if @selectedGear?
