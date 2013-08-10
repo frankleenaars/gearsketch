@@ -136,8 +136,8 @@
     };
 
     GearSketch.prototype.loadBoard = function() {
-      var boardJSON, error, hash;
-      return this.board = (function() {
+      var boardJSON, error, gear, hash, id, _ref, _results;
+      this.board = (function() {
         if (parent.location.hash.length > 1) {
           try {
             hash = parent.location.hash.substr(1);
@@ -152,6 +152,13 @@
           return new Board();
         }
       }).call(this);
+      _ref = this.board.getGears();
+      _results = [];
+      for (id in _ref) {
+        gear = _ref[id];
+        _results.push(this.addGearImage(gear));
+      }
+      return _results;
     };
 
     GearSketch.prototype.displayMessage = function(message, color, time) {

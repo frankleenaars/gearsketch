@@ -4,9 +4,10 @@
 "use strict"
 
 # TODO:
+# - support IE9?
 # - use "for element, i in ..." where appropriate
 # - chained comparisons: 1 < x < 100
-# - improve icons
+# - improve gear, chain & momentum icons
 # - disallow chains crossing gears' axes? (if gear on higher level)
 # - allow gears to overlap other gears' axes when the larger gear is on a higher level?
 # - figure out why drawing with RAF is slower than drawing without RAF on iPad
@@ -125,6 +126,8 @@ class GearSketch
           new Board()
       else
         new Board()
+    @addGearImage(gear) for id, gear of @board.getGears()
+
 
   displayMessage: (message, color = "black", time = 0) ->
     @message = message
