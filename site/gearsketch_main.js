@@ -76,11 +76,15 @@
 
     GearSketch.prototype.restTimer = 0;
 
-    function GearSketch() {
+    function GearSketch(showButtons) {
+      if (showButtons == null) {
+        showButtons = true;
+      }
       this.update = __bind(this.update, this);
       this.updateAndDrawNoRAF = __bind(this.updateAndDrawNoRAF, this);
       this.updateAndDraw = __bind(this.updateAndDraw, this);
       this.loadButtons();
+      this.showButtons = showButtons;
       this.loadDemoPointer();
       this.loadBoard();
       this.canvas = document.getElementById("gearsketch_canvas");
@@ -171,6 +175,14 @@
       return this.message = "";
     };
 
+    GearSketch.prototype.selectButton = function(buttonName) {
+      return this.selectedButton = buttonName;
+    };
+
+    GearSketch.prototype.shouldShowButtons = function() {
+      return this.showButtons || this.isDemoPlaying;
+    };
+
     GearSketch.prototype.addCanvasListeners = function() {
       var canvasEventHandler,
         _this = this;
@@ -232,7 +244,7 @@
           } else if (button.name === "helpButton") {
             return this.playDemo();
           } else {
-            return this.selectedButton = button.name;
+            return this.selectButton(button.name);
           }
         } else if (this.selectedButton === "gearButton") {
           this.selectedGear = this.board.getTopLevelGearAt(point);
@@ -312,6 +324,9 @@
 
     GearSketch.prototype.getButtonAt = function(x, y) {
       var button, buttonName, _ref;
+      if (!this.shouldShowButtons()) {
+        return null;
+      }
       _ref = this.buttons;
       for (buttonName in _ref) {
         if (!__hasProp.call(_ref, buttonName)) continue;
@@ -729,7 +744,7 @@
           ctx.stroke();
           ctx.restore();
         }
-        if (this.areButtonsLoaded) {
+        if (this.areButtonsLoaded && this.shouldShowButtons()) {
           _ref3 = this.buttons;
           for (buttonName in _ref3) {
             if (!__hasProp.call(_ref3, buttonName)) continue;

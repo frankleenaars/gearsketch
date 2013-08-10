@@ -74,8 +74,11 @@ class GearSketch
   movementCompletion: 0
   restTimer: 0
 
-  constructor: ->
+  # Passing false to showButtons will hide them, unless the demo is
+  # playing. This comes handy when adding controls outside the canvas.
+  constructor: (showButtons = true) ->
     @loadButtons()
+    @showButtons = showButtons
     @loadDemoPointer()
     @loadBoard()
     @canvas = document.getElementById("gearsketch_canvas")
@@ -132,6 +135,12 @@ class GearSketch
   clearMessage: ->
     @message = ""
 
+  selectButton: (buttonName) ->
+    @selectedButton = buttonName
+
+  shouldShowButtons: ->
+    return @showButtons or @isDemoPlaying
+
   # Input callback methods
   addCanvasListeners: ->
     canvasEventHandler = Hammer(@canvas, {drag_min_distance: 1})
@@ -176,7 +185,7 @@ class GearSketch
         else if button.name is "helpButton"
           @playDemo()
         else
-          @selectedButton = button.name
+          @selectButton(button.name)
       else if @selectedButton is "gearButton"
         @selectedGear = @board.getTopLevelGearAt(point)
         if @selectedGear?
@@ -239,6 +248,9 @@ class GearSketch
     y < button.location.y + button.height + 2 * button.padding
 
   getButtonAt: (x, y) ->
+    if not @shouldShowButtons()
+        return null
+
     for own buttonName, button of @buttons
       if @isButtonAt(x, y, button)
         return button
@@ -584,7 +596,7 @@ class GearSketch
         ctx.restore()
 
       # draw buttons
-      if @areButtonsLoaded
+      if @areButtonsLoaded and @shouldShowButtons()
         for own buttonName of @buttons
           @drawButton(ctx, @buttons[buttonName])
 
