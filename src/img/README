@@ -1,0 +1,40 @@
+To obtain gears as SVG images, do:
+
+1. Download canvas-getsvg.js from https://code.google.com/p/canvas-svg/
+
+2. Add it to site/index.html
+
+    <script type="text/javascript" src="canvas-getsvg.js"></script>
+
+3. Modify site/gearsketch_main.js like this:
+
+    diff --git a/site/gearsketch_main.js b/site/gearsketch_main.js
+    index 4f439ff..21c329f 100644
+    --- a/site/gearsketch_main.js
+    +++ b/site/gearsketch_main.js
+    @@ -445,9 +445,19 @@
+           size = 2 * (gear.outerRadius + MODULE);
+           gearCanvas.height = size;
+           gearCanvas.width = size;
+    +
+    +      var cs = new CanvasSVG.Deferred();
+    +      cs.wrapCanvas(gearCanvas);
+    +
+           ctx = gearCanvas.getContext("2d");
+           gearCopy = new Gear(new Point(0.5 * size, 0.5 * size), 0, gear.numberOfTeeth, this.selectedGear.id);
+           this.drawGear(ctx, gearCopy);
+    +
+    +      var svg = ctx.getSVG();
+    +      var serializer = new XMLSerializer();
+    +      var svgString = serializer.serializeToString(svg);
+    +      console.log(svgString);
+    +
+           image = new Image();
+           image.onload = function() {
+             return _this.gearImageLoaded(gear.numberOfTeeth, image);
+
+
+After that, each time you draw a gear, the content of the SVG will be
+printed to the inspector console.  You can then copy the text to a
+file with extension .svg and use it to make new icons.  This is how
+the files gear-*.svg in this directory where done.
