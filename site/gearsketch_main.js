@@ -596,7 +596,7 @@
       ctx.save();
       ctx.translate(x, y);
       ctx.beginPath();
-      radius = 5;
+      radius = 10;
       width = button.width + 2 * padding;
       height = button.height + 2 * padding;
       ctx.moveTo(radius, 0);
