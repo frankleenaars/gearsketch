@@ -524,6 +524,7 @@ class Board
             @updateGroupsAndLevelsFrom(neighborId, group, level - 1, updatedGroups, updatedLevels)
 
   updateGroupsAndLevels: ->
+    # TODO: remove updatedGroups and updatedLevels and update TurningObjects directly
     updatedGroups = {}
     updatedLevels = {}
     group = 0
@@ -561,7 +562,7 @@ class Board
     angle2 = angle1 + Math.PI
     shift1 = Util.mod(angle1 - r1, 2 * Math.PI)
     shift2 = Util.mod(angle2 - r2, 2 * Math.PI)
-    toothAngle1 = (2 * Math.PI ) / gear1.numberOfTeeth
+    toothAngle1 = (2 * Math.PI) / gear1.numberOfTeeth
     toothAngle2 = (2 * Math.PI) / gear2.numberOfTeeth
     phase1 = (shift1 % toothAngle1) / toothAngle1
     phase2 = (shift2 % toothAngle2) / toothAngle2
@@ -593,6 +594,7 @@ class Board
     neighbors = @findMeshingNeighbors(gear)
     for neighbor in neighbors
       @addConnection(gear, neighbor, ConnectionType.MESHING)
+      angle = @findRelativeAlignment(neighbor, gear);
       r = neighbor.rotation
       @alignGearTeeth(neighbor, gear)
       angle = neighbor.rotation - r

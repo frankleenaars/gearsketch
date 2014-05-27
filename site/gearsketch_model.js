@@ -918,6 +918,7 @@
       for (_i = 0, _len = neighbors.length; _i < _len; _i++) {
         neighbor = neighbors[_i];
         this.addConnection(gear, neighbor, ConnectionType.MESHING);
+        angle = this.findRelativeAlignment(neighbor, gear);
         r = neighbor.rotation;
         this.alignGearTeeth(neighbor, gear);
         angle = neighbor.rotation - r;

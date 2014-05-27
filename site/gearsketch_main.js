@@ -364,7 +364,7 @@
     };
 
     GearSketch.prototype.createGearFromStroke = function(stroke) {
-      var area, doubleArea, height, i, idealTrueAreaRatio, j, maxX, maxY, minX, minY, numberOfPoints, p, radius, sumX, sumY, t, width, x, y, _i, _j, _len;
+      var area, doubleArea, height, i, idealTrueAreaRatio, maxX, maxY, minX, minY, numberOfPoints, p, p1, p2, radius, sumX, sumY, t, width, x, y, _i, _j, _len, _len1;
       numberOfPoints = stroke.length;
       if (numberOfPoints > 0) {
         sumX = 0;
@@ -386,10 +386,10 @@
         height = maxY - minY;
         t = Math.floor(0.5 * (width + height) / MODULE);
         doubleArea = 0;
-        for (i = _j = 0; 0 <= numberOfPoints ? _j < numberOfPoints : _j > numberOfPoints; i = 0 <= numberOfPoints ? ++_j : --_j) {
-          j = (i + 1) % numberOfPoints;
-          doubleArea += stroke[i].x * stroke[j].y;
-          doubleArea -= stroke[i].y * stroke[j].x;
+        for (i = _j = 0, _len1 = stroke.length; _j < _len1; i = ++_j) {
+          p1 = stroke[i];
+          p2 = stroke[(i + 1) % numberOfPoints];
+          doubleArea += p1.cross(p2);
         }
         area = Math.abs(doubleArea) / 2;
         radius = 0.25 * ((maxX - minX) + (maxY - minY));

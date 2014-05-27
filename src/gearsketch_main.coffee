@@ -294,10 +294,9 @@ class GearSketch
       # find area, based on http://stackoverflow.com/questions/451426
       # /how-do-i-calculate-the-surface-area-of-a-2d-polygon
       doubleArea = 0
-      for i in [0...numberOfPoints]
-        j = (i + 1) % numberOfPoints
-        doubleArea += stroke[i].x * stroke[j].y
-        doubleArea -= stroke[i].y * stroke[j].x
+      for p1, i in stroke
+        p2 = stroke[(i + 1) % numberOfPoints]
+        doubleArea += p1.cross(p2)
 
       # create a new gear if the stroke is sufficiently circle-like and large enough
       area = Math.abs(doubleArea) / 2
