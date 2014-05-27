@@ -4,13 +4,10 @@
 "use strict"
 
 # TODO:
-# - support IE9?
 # - use "for element, i in ..." where appropriate
 # - chained comparisons: 1 < x < 100
-# - improve gear, chain & momentum icons
 # - disallow chains crossing gears' axes? (if gear on higher level)
 # - allow gears to overlap other gears' axes when the larger gear is on a higher level?
-# - figure out why drawing with RAF is slower than drawing without RAF on iPad
 
 # imports
 Point = window.gearsketch.Point
@@ -35,9 +32,6 @@ class GearSketch
   AXIS_RADIUS = Util.AXIS_RADIUS
 
   BUTTON_INFO = [
-    ["gearButton", "GearIcon.png"]
-    ["chainButton", "ChainIcon.png"]
-    ["momentumButton", "MomentumIcon.png"]
     ["playButton", "PlayIcon.png"]
     ["clearButton", "ClearIcon.png"]
     ["cloudButton", "CloudIcon.png"]
@@ -55,16 +49,22 @@ class GearSketch
     LEFT_HALF_CIRCLE: "leftHalfCircle"
     RIGHT_HALF_CIRCLE: "rightHalfCircle"
 
+  Action =
+    DRAGGING: "dragging"
+    SETTING_MOMENTUM: "settingMomentum"
+    STROKING: "stroking"
+
   buttons: {}
   loadedButtons: 0
   areButtonsLoaded: false
-  selectedButton: BUTTON_INFO[0][0]
 
   gearImages: {}
 
+  currentAction: null
   isPenDown: false
   stroke: []
   offset: new Point()
+  isPlaying: false
 
   message: ""
   messageColor: "black"
@@ -89,8 +89,7 @@ class GearSketch
     @updateCanvasSize()
     @addCanvasListeners()
     @lastUpdateTime = new Date().getTime()
-    #@updateAndDraw()
-    @updateAndDrawNoRAF()
+    @updateAndDraw()
 
   buttonLoaded: ->
     @loadedButtons++
@@ -128,7 +127,6 @@ class GearSketch
         new Board()
     @addGearImage(gear) for id, gear of @board.getGears()
 
-
   displayMessage: (message, color = "black", time = 0) ->
     @message = message
     @messageColor = color
@@ -137,9 +135,6 @@ class GearSketch
 
   clearMessage: ->
     @message = ""
-
-  selectButton: (buttonName) ->
-    @selectedButton = buttonName
 
   shouldShowButtons: ->
     return @showButtons or @isDemoPlaying
@@ -177,9 +172,14 @@ class GearSketch
       # pen released outside of canvas
       @handlePenUp()
     else
+      @isPlaying = false
       button = @getButtonAt(x, y)
       if button
-        if button.name is "clearButton"
+        if button.name is "playButton"
+          @isPlaying = true
+          if @board.getGearList().every((g) -> g.momentum is 0)
+            @displayMessage("Add some arrows!", "black", 2000)
+        else if button.name is "clearButton"
           # remove hash from url and clear board
           parent.location.hash = ""
           @board.clear()
@@ -187,62 +187,53 @@ class GearSketch
           @uploadBoard()
         else if button.name is "helpButton"
           @playDemo()
+      else
+        {gear, selection} = @gearAt(x,y)
+        if gear
+          @selectedGear = gear
+          if selection is "center"
+            @currentAction = Action.DRAGGING
+            @offset = point.minus(@selectedGear.location)
+          else
+            @currentAction = Action.SETTING_MOMENTUM
+            @selectedGear.momentum = 0
+            @selectedGearMomentum = @calculateMomentumFromCoords(@selectedGear, x, y)
         else
-          @selectButton(button.name)
-      else if @selectedButton is "gearButton"
-        @selectedGear = @board.getTopLevelGearAt(point)
-        if @selectedGear?
-          @offset = point.minus(@selectedGear.location)
-        else if !@board.getGearAt(point)? # don't create stroke if lower level gear selected
+          @currentAction = Action.STROKING
           @stroke.push(point)
         @isPenDown = true
-      else if @selectedButton is "chainButton"
-        @stroke.push(point)
-        @isPenDown = true
-      else if @selectedButton is "momentumButton"
-        @selectedGear = @board.getGearAt(point)
-        if @selectedGear
-          @selectedGear.momentum = 0
-          @selectedGearMomentum = @calculateMomentumFromCoords(@selectedGear, x, y)
-        @isPenDown = true
+
 
   handlePenMove: (x, y) ->
     point = new Point(x, y)
     if @isPenDown
-      if @selectedButton is "gearButton"
-        if @selectedGear
-          goalLocation = point.minus(@offset)
-          canPlaceGear = @board.placeGear(@selectedGear, goalLocation)
-          if canPlaceGear
-            @goalLocationGear = null
-          else
-            @goalLocationGear =
-              new Gear(goalLocation, @selectedGear.rotation, @selectedGear.numberOfTeeth, @selectedGear.id)
-        else if @stroke.length > 0
-          @stroke.push(point)
-      else if @selectedButton is "chainButton"
+      if @currentAction is Action.DRAGGING
+        goalLocation = point.minus(@offset)
+        canPlaceGear = @board.placeGear(@selectedGear, goalLocation)
+        if canPlaceGear
+          @goalLocationGear = null
+        else
+          @goalLocationGear =
+            new Gear(goalLocation, @selectedGear.rotation, @selectedGear.numberOfTeeth, @selectedGear.id)
+      else if @currentAction is Action.SETTING_MOMENTUM
+        @selectedGearMomentum = @calculateMomentumFromCoords(@selectedGear, x, y)
+      else if @currentAction is Action.STROKING
         @stroke.push(point)
-      else if @selectedButton is "momentumButton"
-        if @selectedGear
-          @selectedGearMomentum = @calculateMomentumFromCoords(@selectedGear, x, y)
 
   handlePenUp: ->
     if @isPenDown
-      if @selectedButton is "gearButton"
-        unless (@selectedGear? or @stroke.length is 0)
-          @processGearStroke()
-      else if @selectedButton is "chainButton"
-        @processChainStroke()
-      else if @selectedButton is "momentumButton"
-        if @selectedGear
-          if Math.abs(@selectedGearMomentum) > MIN_MOMENTUM
-            @selectedGear.momentum = @selectedGearMomentum
-          else
-            @selectedGear.momentum = 0
+      if @currentAction is Action.SETTING_MOMENTUM
+        if Math.abs(@selectedGearMomentum) > MIN_MOMENTUM
+          @selectedGear.momentum = @selectedGearMomentum
+        else
+          @selectedGear.momentum = 0
         @selectedGearMomentum = 0
+      else if @currentAction is Action.STROKING
+        @processStroke()
       @selectedGear = null
       @goalLocationGear = null
       @isPenDown = false
+      @currentAction = null
 
   isButtonAt: (x, y, button) ->
     x > button.location.x and
@@ -258,6 +249,16 @@ class GearSketch
       if @isButtonAt(x, y, button)
         return button
     null
+
+  gearAt: (x, y) ->
+    point = new Point(x, y)
+    gear = @board.getGearAt(point)
+    if not gear
+      {gear: null}
+    else if gear.location.distance(point) < 0.5 * gear.outerRadius
+      {gear: gear, selection: "center"}
+    else
+      {gear: gear, selection: "edge"}
 
   normalizeStroke: (stroke) ->
     MIN_POINT_DISTANCE = 10
@@ -313,17 +314,6 @@ class GearSketch
       if Util.pointPathDistance(gear.location, stroke, false) < gear.innerRadius
         @board.removeGear(gear)
 
-  processGearStroke: ->
-    normalizedStroke = @normalizeStroke(@stroke)
-    gear = @createGearFromStroke(normalizedStroke)
-    if gear?
-      isGearAdded = @board.addGear(gear)
-      if isGearAdded and !(gear.numberOfTeeth of @gearImages)
-        @addGearImage(gear)
-    else
-      @removeStrokedGears(normalizedStroke)
-    @stroke = []
-
   gearImageLoaded: (numberOfTeeth, image) ->
     @gearImages[numberOfTeeth] = image
 
@@ -342,20 +332,33 @@ class GearSketch
     image.onload = => @gearImageLoaded(gear.numberOfTeeth, image)
     image.src = gearCanvas.toDataURL("image/png")
 
+  isChainStroked: (stroke) ->
+    for own id, chain of @board.getChains()
+      if chain.intersectsPath(stroke)
+        return true
+    false
+
   removeStrokedChains: (stroke) ->
     for own id, chain of @board.getChains()
       if chain.intersectsPath(stroke)
         @board.removeChain(chain)
 
-  processChainStroke: ->
+  processStroke: ->
     normalizedStroke = @normalizeStroke(@stroke)
+    if normalizedStroke.length >= 3
+      if Util.findGearsInsidePolygon(normalizedStroke, @board.getGears()).length > 0
+        chain = new Chain(normalizedStroke)
+        @board.addChain(chain)
+      else
+        gear = @createGearFromStroke(normalizedStroke)
+        if gear?
+          if @board.addGear(gear) and !(gear.numberOfTeeth of @gearImages)
+            @addGearImage(gear)
+        else if @isChainStroked(normalizedStroke)
+          @removeStrokedChains(normalizedStroke)
+        else
+          @removeStrokedGears(normalizedStroke)
     @stroke = []
-    gearsInChain = Util.findGearsInsidePolygon(normalizedStroke, @board.getGears())
-    if normalizedStroke.length >= 3 and gearsInChain.length > 0
-      chain = new Chain(normalizedStroke)
-      @board.addChain(chain)
-    else if normalizedStroke.length >= 2
-      @removeStrokedChains(normalizedStroke)
 
   calculateMomentumFromCoords: (gear, x, y) ->
     angle = Math.atan2(y - gear.location.y, x - gear.location.x)
@@ -373,15 +376,10 @@ class GearSketch
       @draw()
     ), 1000 / FPS)
 
-  updateAndDrawNoRAF: =>
-    @update()
-    @draw()
-    setTimeout((=> @updateAndDrawNoRAF()), 1000 / FPS)
-
   update: =>
     updateTime = new Date().getTime()
     delta = updateTime - @lastUpdateTime
-    if @selectedButton is "playButton"
+    if @isPlaying
       @board.rotateAllTurningObjects(delta)
     if @isDemoPlaying
       @updateDemo(delta)
@@ -584,12 +582,8 @@ class GearSketch
       # draw stroke
       if @stroke.length > 0
         ctx.save()
-        if @selectedButton is "gearButton"
-          ctx.strokeStyle = "black"
-          ctx.lineWidth = 2
-        else # chain stroke
-          ctx.strokeStyle = "blue"
-          ctx.lineWidth = 4
+        ctx.strokeStyle = "black"
+        ctx.lineWidth = 2
         ctx.beginPath()
         ctx.moveTo(@stroke[0].x, @stroke[0].y)
         for i in [1...@stroke.length]
@@ -625,12 +619,7 @@ class GearSketch
   loadDemoMovements: ->
     @demoMovements = [
       from: @getButtonCenter("helpButton")
-      to: @getButtonCenter("gearButton")
-      atEnd: MovementAction.PEN_TAP
-      type: MovementType.STRAIGHT
-      duration: 2000
-    ,
-      to: new Point(300, 200)
+      to: new Point(400, 200)
       type: MovementType.STRAIGHT
       duration: 1500
     ,
@@ -640,7 +629,7 @@ class GearSketch
       radius: 100
       duration: 1500
     ,
-      to: new Point(500, 200)
+      to: new Point(600, 200)
       type: MovementType.STRAIGHT
       duration: 1000
     ,
@@ -650,17 +639,17 @@ class GearSketch
       radius: 40
       duration: 1000
     ,
-      to: new Point(500, 240)
+      to: new Point(600, 240)
       type: MovementType.STRAIGHT
       duration: 500
     ,
-      to: new Point(300, 300)
+      to: new Point(400, 300)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      to: new Point(100, 180)
+      to: new Point(200, 180)
       type: MovementType.STRAIGHT
       duration: 1000
     ,
@@ -670,17 +659,17 @@ class GearSketch
       radius: 90
       duration: 1000
     ,
-      to: new Point(100, 260)
+      to: new Point(200, 260)
       type: MovementType.STRAIGHT
       duration: 500
     ,
-      to: new Point(180, 260)
+      to: new Point(280, 260)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      to: new Point(550, 220)
+      to: new Point(650, 220)
       type: MovementType.STRAIGHT
       duration: 1500
     ,
@@ -690,12 +679,7 @@ class GearSketch
       radius: 80
       duration: 1000
     ,
-      to: @getButtonCenter("chainButton")
-      atEnd: MovementAction.PEN_TAP
-      type: MovementType.STRAIGHT
-      duration: 1500
-    ,
-      to: new Point(280, 150)
+      to: new Point(380, 150)
       type: MovementType.STRAIGHT
       duration: 1500
     ,
@@ -705,7 +689,7 @@ class GearSketch
       duration: 1500
       pause: 0
     ,
-      to: new Point(600, 400)
+      to: new Point(700, 400)
       type: MovementType.STRAIGHT
       duration: 1000
       pause: 0
@@ -715,66 +699,51 @@ class GearSketch
       duration: 1000
       pause: 0
     ,
-      to: new Point(280, 150)
+      to: new Point(380, 150)
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      to: @getButtonCenter("momentumButton")
-      atEnd: MovementAction.PEN_TAP
+      to: new Point(285, 180)
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      to: new Point(185, 180)
-      type: MovementType.STRAIGHT
-      duration: 1500
-    ,
-      to: new Point(150, 190)
+      to: new Point(250, 190)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
-    ,
+    , # press play button
       to: @getButtonCenter("playButton")
       atEnd: MovementAction.PEN_TAP
       type: MovementType.STRAIGHT
-      duration: 1500
+      duration: 1000
     ,
-      to: @getButtonCenter("chainButton")
-      atEnd: MovementAction.PEN_TAP
+      to: new Point(525, 250)
       type: MovementType.STRAIGHT
       duration: 3000
     ,
-      to: new Point(425, 250)
-      type: MovementType.STRAIGHT
-      duration: 1000
-    ,
-      to: new Point(525, 150)
+      to: new Point(625, 150)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      to: @getButtonCenter("gearButton")
-      atEnd: MovementAction.PEN_TAP
-      type: MovementType.STRAIGHT
-      duration: 1500
-    ,
-      to: new Point(20, 250)
+      to: new Point(120, 250)
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      to: new Point(650, 300)
+      to: new Point(750, 300)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT
       duration: 1500
     ,
-      to: new Point(425, 200)
+      to: new Point(525, 200)
       type: MovementType.STRAIGHT
       duration: 1000
     ,
-      to: new Point(200, 400)
+      to: new Point(300, 400)
       atStart: MovementAction.PEN_DOWN
       atEnd: MovementAction.PEN_UP
       type: MovementType.STRAIGHT

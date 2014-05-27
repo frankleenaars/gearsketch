@@ -27,13 +27,13 @@
   MIN_MOMENTUM = 0.2;
 
   GearSketch = (function() {
-    var AXIS_RADIUS, BUTTON_INFO, MODULE, MovementAction, MovementType;
+    var AXIS_RADIUS, Action, BUTTON_INFO, MODULE, MovementAction, MovementType;
 
     MODULE = Util.MODULE;
 
     AXIS_RADIUS = Util.AXIS_RADIUS;
 
-    BUTTON_INFO = [["gearButton", "GearIcon.png"], ["chainButton", "ChainIcon.png"], ["momentumButton", "MomentumIcon.png"], ["playButton", "PlayIcon.png"], ["clearButton", "ClearIcon.png"], ["cloudButton", "CloudIcon.png"], ["helpButton", "HelpIcon.png"]];
+    BUTTON_INFO = [["playButton", "PlayIcon.png"], ["clearButton", "ClearIcon.png"], ["cloudButton", "CloudIcon.png"], ["helpButton", "HelpIcon.png"]];
 
     MovementAction = {
       PEN_DOWN: "penDown",
@@ -48,21 +48,29 @@
       RIGHT_HALF_CIRCLE: "rightHalfCircle"
     };
 
+    Action = {
+      DRAGGING: "dragging",
+      SETTING_MOMENTUM: "settingMomentum",
+      STROKING: "stroking"
+    };
+
     GearSketch.prototype.buttons = {};
 
     GearSketch.prototype.loadedButtons = 0;
 
     GearSketch.prototype.areButtonsLoaded = false;
 
-    GearSketch.prototype.selectedButton = BUTTON_INFO[0][0];
-
     GearSketch.prototype.gearImages = {};
+
+    GearSketch.prototype.currentAction = null;
 
     GearSketch.prototype.isPenDown = false;
 
     GearSketch.prototype.stroke = [];
 
     GearSketch.prototype.offset = new Point();
+
+    GearSketch.prototype.isPlaying = false;
 
     GearSketch.prototype.message = "";
 
@@ -81,7 +89,6 @@
         showButtons = true;
       }
       this.update = __bind(this.update, this);
-      this.updateAndDrawNoRAF = __bind(this.updateAndDrawNoRAF, this);
       this.updateAndDraw = __bind(this.updateAndDraw, this);
       this.loadButtons();
       this.showButtons = showButtons;
@@ -94,7 +101,7 @@
       this.updateCanvasSize();
       this.addCanvasListeners();
       this.lastUpdateTime = new Date().getTime();
-      this.updateAndDrawNoRAF();
+      this.updateAndDraw();
     }
 
     GearSketch.prototype.buttonLoaded = function() {
@@ -182,10 +189,6 @@
       return this.message = "";
     };
 
-    GearSketch.prototype.selectButton = function(buttonName) {
-      return this.selectedButton = buttonName;
-    };
-
     GearSketch.prototype.shouldShowButtons = function() {
       return this.showButtons || this.isDemoPlaying;
     };
@@ -236,39 +239,44 @@
     };
 
     GearSketch.prototype.handlePenDown = function(x, y) {
-      var button, point;
+      var button, gear, point, selection, _ref;
       point = new Point(x, y);
       if (this.isPenDown) {
         return this.handlePenUp();
       } else {
+        this.isPlaying = false;
         button = this.getButtonAt(x, y);
         if (button) {
-          if (button.name === "clearButton") {
+          if (button.name === "playButton") {
+            this.isPlaying = true;
+            if (this.board.getGearList().every(function(g) {
+              return g.momentum === 0;
+            })) {
+              return this.displayMessage("Add some arrows!", "black", 2000);
+            }
+          } else if (button.name === "clearButton") {
             parent.location.hash = "";
             return this.board.clear();
           } else if (button.name === "cloudButton") {
             return this.uploadBoard();
           } else if (button.name === "helpButton") {
             return this.playDemo();
+          }
+        } else {
+          _ref = this.gearAt(x, y), gear = _ref.gear, selection = _ref.selection;
+          if (gear) {
+            this.selectedGear = gear;
+            if (selection === "center") {
+              this.currentAction = Action.DRAGGING;
+              this.offset = point.minus(this.selectedGear.location);
+            } else {
+              this.currentAction = Action.SETTING_MOMENTUM;
+              this.selectedGear.momentum = 0;
+              this.selectedGearMomentum = this.calculateMomentumFromCoords(this.selectedGear, x, y);
+            }
           } else {
-            return this.selectButton(button.name);
-          }
-        } else if (this.selectedButton === "gearButton") {
-          this.selectedGear = this.board.getTopLevelGearAt(point);
-          if (this.selectedGear != null) {
-            this.offset = point.minus(this.selectedGear.location);
-          } else if (this.board.getGearAt(point) == null) {
+            this.currentAction = Action.STROKING;
             this.stroke.push(point);
-          }
-          return this.isPenDown = true;
-        } else if (this.selectedButton === "chainButton") {
-          this.stroke.push(point);
-          return this.isPenDown = true;
-        } else if (this.selectedButton === "momentumButton") {
-          this.selectedGear = this.board.getGearAt(point);
-          if (this.selectedGear) {
-            this.selectedGear.momentum = 0;
-            this.selectedGearMomentum = this.calculateMomentumFromCoords(this.selectedGear, x, y);
           }
           return this.isPenDown = true;
         }
@@ -279,49 +287,38 @@
       var canPlaceGear, goalLocation, point;
       point = new Point(x, y);
       if (this.isPenDown) {
-        if (this.selectedButton === "gearButton") {
-          if (this.selectedGear) {
-            goalLocation = point.minus(this.offset);
-            canPlaceGear = this.board.placeGear(this.selectedGear, goalLocation);
-            if (canPlaceGear) {
-              return this.goalLocationGear = null;
-            } else {
-              return this.goalLocationGear = new Gear(goalLocation, this.selectedGear.rotation, this.selectedGear.numberOfTeeth, this.selectedGear.id);
-            }
-          } else if (this.stroke.length > 0) {
-            return this.stroke.push(point);
+        if (this.currentAction === Action.DRAGGING) {
+          goalLocation = point.minus(this.offset);
+          canPlaceGear = this.board.placeGear(this.selectedGear, goalLocation);
+          if (canPlaceGear) {
+            return this.goalLocationGear = null;
+          } else {
+            return this.goalLocationGear = new Gear(goalLocation, this.selectedGear.rotation, this.selectedGear.numberOfTeeth, this.selectedGear.id);
           }
-        } else if (this.selectedButton === "chainButton") {
+        } else if (this.currentAction === Action.SETTING_MOMENTUM) {
+          return this.selectedGearMomentum = this.calculateMomentumFromCoords(this.selectedGear, x, y);
+        } else if (this.currentAction === Action.STROKING) {
           return this.stroke.push(point);
-        } else if (this.selectedButton === "momentumButton") {
-          if (this.selectedGear) {
-            return this.selectedGearMomentum = this.calculateMomentumFromCoords(this.selectedGear, x, y);
-          }
         }
       }
     };
 
     GearSketch.prototype.handlePenUp = function() {
       if (this.isPenDown) {
-        if (this.selectedButton === "gearButton") {
-          if (!((this.selectedGear != null) || this.stroke.length === 0)) {
-            this.processGearStroke();
-          }
-        } else if (this.selectedButton === "chainButton") {
-          this.processChainStroke();
-        } else if (this.selectedButton === "momentumButton") {
-          if (this.selectedGear) {
-            if (Math.abs(this.selectedGearMomentum) > MIN_MOMENTUM) {
-              this.selectedGear.momentum = this.selectedGearMomentum;
-            } else {
-              this.selectedGear.momentum = 0;
-            }
+        if (this.currentAction === Action.SETTING_MOMENTUM) {
+          if (Math.abs(this.selectedGearMomentum) > MIN_MOMENTUM) {
+            this.selectedGear.momentum = this.selectedGearMomentum;
+          } else {
+            this.selectedGear.momentum = 0;
           }
           this.selectedGearMomentum = 0;
+        } else if (this.currentAction === Action.STROKING) {
+          this.processStroke();
         }
         this.selectedGear = null;
         this.goalLocationGear = null;
-        return this.isPenDown = false;
+        this.isPenDown = false;
+        return this.currentAction = null;
       }
     };
 
@@ -343,6 +340,27 @@
         }
       }
       return null;
+    };
+
+    GearSketch.prototype.gearAt = function(x, y) {
+      var gear, point;
+      point = new Point(x, y);
+      gear = this.board.getGearAt(point);
+      if (!gear) {
+        return {
+          gear: null
+        };
+      } else if (gear.location.distance(point) < 0.5 * gear.outerRadius) {
+        return {
+          gear: gear,
+          selection: "center"
+        };
+      } else {
+        return {
+          gear: gear,
+          selection: "edge"
+        };
+      }
     };
 
     GearSketch.prototype.normalizeStroke = function(stroke) {
@@ -419,21 +437,6 @@
       return _results;
     };
 
-    GearSketch.prototype.processGearStroke = function() {
-      var gear, isGearAdded, normalizedStroke;
-      normalizedStroke = this.normalizeStroke(this.stroke);
-      gear = this.createGearFromStroke(normalizedStroke);
-      if (gear != null) {
-        isGearAdded = this.board.addGear(gear);
-        if (isGearAdded && !(gear.numberOfTeeth in this.gearImages)) {
-          this.addGearImage(gear);
-        }
-      } else {
-        this.removeStrokedGears(normalizedStroke);
-      }
-      return this.stroke = [];
-    };
-
     GearSketch.prototype.gearImageLoaded = function(numberOfTeeth, image) {
       return this.gearImages[numberOfTeeth] = image;
     };
@@ -455,6 +458,19 @@
       return image.src = gearCanvas.toDataURL("image/png");
     };
 
+    GearSketch.prototype.isChainStroked = function(stroke) {
+      var chain, id, _ref;
+      _ref = this.board.getChains();
+      for (id in _ref) {
+        if (!__hasProp.call(_ref, id)) continue;
+        chain = _ref[id];
+        if (chain.intersectsPath(stroke)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     GearSketch.prototype.removeStrokedChains = function(stroke) {
       var chain, id, _ref, _results;
       _ref = this.board.getChains();
@@ -471,17 +487,27 @@
       return _results;
     };
 
-    GearSketch.prototype.processChainStroke = function() {
-      var chain, gearsInChain, normalizedStroke;
+    GearSketch.prototype.processStroke = function() {
+      var chain, gear, normalizedStroke;
       normalizedStroke = this.normalizeStroke(this.stroke);
-      this.stroke = [];
-      gearsInChain = Util.findGearsInsidePolygon(normalizedStroke, this.board.getGears());
-      if (normalizedStroke.length >= 3 && gearsInChain.length > 0) {
-        chain = new Chain(normalizedStroke);
-        return this.board.addChain(chain);
-      } else if (normalizedStroke.length >= 2) {
-        return this.removeStrokedChains(normalizedStroke);
+      if (normalizedStroke.length >= 3) {
+        if (Util.findGearsInsidePolygon(normalizedStroke, this.board.getGears()).length > 0) {
+          chain = new Chain(normalizedStroke);
+          this.board.addChain(chain);
+        } else {
+          gear = this.createGearFromStroke(normalizedStroke);
+          if (gear != null) {
+            if (this.board.addGear(gear) && !(gear.numberOfTeeth in this.gearImages)) {
+              this.addGearImage(gear);
+            }
+          } else if (this.isChainStroked(normalizedStroke)) {
+            this.removeStrokedChains(normalizedStroke);
+          } else {
+            this.removeStrokedGears(normalizedStroke);
+          }
+        }
       }
+      return this.stroke = [];
     };
 
     GearSketch.prototype.calculateMomentumFromCoords = function(gear, x, y) {
@@ -504,20 +530,11 @@
       }), 1000 / FPS);
     };
 
-    GearSketch.prototype.updateAndDrawNoRAF = function() {
-      var _this = this;
-      this.update();
-      this.draw();
-      return setTimeout((function() {
-        return _this.updateAndDrawNoRAF();
-      }), 1000 / FPS);
-    };
-
     GearSketch.prototype.update = function() {
       var delta, updateTime;
       updateTime = new Date().getTime();
       delta = updateTime - this.lastUpdateTime;
-      if (this.selectedButton === "playButton") {
+      if (this.isPlaying) {
         this.board.rotateAllTurningObjects(delta);
       }
       if (this.isDemoPlaying) {
@@ -736,13 +753,8 @@
         }
         if (this.stroke.length > 0) {
           ctx.save();
-          if (this.selectedButton === "gearButton") {
-            ctx.strokeStyle = "black";
-            ctx.lineWidth = 2;
-          } else {
-            ctx.strokeStyle = "blue";
-            ctx.lineWidth = 4;
-          }
+          ctx.strokeStyle = "black";
+          ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.moveTo(this.stroke[0].x, this.stroke[0].y);
           for (i = _l = 1, _ref2 = this.stroke.length; 1 <= _ref2 ? _l < _ref2 : _l > _ref2; i = 1 <= _ref2 ? ++_l : --_l) {
@@ -783,12 +795,7 @@
       return this.demoMovements = [
         {
           from: this.getButtonCenter("helpButton"),
-          to: this.getButtonCenter("gearButton"),
-          atEnd: MovementAction.PEN_TAP,
-          type: MovementType.STRAIGHT,
-          duration: 2000
-        }, {
-          to: new Point(300, 200),
+          to: new Point(400, 200),
           type: MovementType.STRAIGHT,
           duration: 1500
         }, {
@@ -798,7 +805,7 @@
           radius: 100,
           duration: 1500
         }, {
-          to: new Point(500, 200),
+          to: new Point(600, 200),
           type: MovementType.STRAIGHT,
           duration: 1000
         }, {
@@ -808,17 +815,17 @@
           radius: 40,
           duration: 1000
         }, {
-          to: new Point(500, 240),
+          to: new Point(600, 240),
           type: MovementType.STRAIGHT,
           duration: 500
         }, {
-          to: new Point(300, 300),
+          to: new Point(400, 300),
           atStart: MovementAction.PEN_DOWN,
           atEnd: MovementAction.PEN_UP,
           type: MovementType.STRAIGHT,
           duration: 1500
         }, {
-          to: new Point(100, 180),
+          to: new Point(200, 180),
           type: MovementType.STRAIGHT,
           duration: 1000
         }, {
@@ -828,17 +835,17 @@
           radius: 90,
           duration: 1000
         }, {
-          to: new Point(100, 260),
+          to: new Point(200, 260),
           type: MovementType.STRAIGHT,
           duration: 500
         }, {
-          to: new Point(180, 260),
+          to: new Point(280, 260),
           atStart: MovementAction.PEN_DOWN,
           atEnd: MovementAction.PEN_UP,
           type: MovementType.STRAIGHT,
           duration: 1500
         }, {
-          to: new Point(550, 220),
+          to: new Point(650, 220),
           type: MovementType.STRAIGHT,
           duration: 1500
         }, {
@@ -848,12 +855,7 @@
           radius: 80,
           duration: 1000
         }, {
-          to: this.getButtonCenter("chainButton"),
-          atEnd: MovementAction.PEN_TAP,
-          type: MovementType.STRAIGHT,
-          duration: 1500
-        }, {
-          to: new Point(280, 150),
+          to: new Point(380, 150),
           type: MovementType.STRAIGHT,
           duration: 1500
         }, {
@@ -863,7 +865,7 @@
           duration: 1500,
           pause: 0
         }, {
-          to: new Point(600, 400),
+          to: new Point(700, 400),
           type: MovementType.STRAIGHT,
           duration: 1000,
           pause: 0
@@ -873,21 +875,16 @@
           duration: 1000,
           pause: 0
         }, {
-          to: new Point(280, 150),
+          to: new Point(380, 150),
           atEnd: MovementAction.PEN_UP,
           type: MovementType.STRAIGHT,
           duration: 1000
         }, {
-          to: this.getButtonCenter("momentumButton"),
-          atEnd: MovementAction.PEN_TAP,
+          to: new Point(285, 180),
           type: MovementType.STRAIGHT,
           duration: 1500
         }, {
-          to: new Point(185, 180),
-          type: MovementType.STRAIGHT,
-          duration: 1500
-        }, {
-          to: new Point(150, 190),
+          to: new Point(250, 190),
           atStart: MovementAction.PEN_DOWN,
           atEnd: MovementAction.PEN_UP,
           type: MovementType.STRAIGHT,
@@ -896,43 +893,33 @@
           to: this.getButtonCenter("playButton"),
           atEnd: MovementAction.PEN_TAP,
           type: MovementType.STRAIGHT,
-          duration: 1500
+          duration: 1000
         }, {
-          to: this.getButtonCenter("chainButton"),
-          atEnd: MovementAction.PEN_TAP,
+          to: new Point(525, 250),
           type: MovementType.STRAIGHT,
           duration: 3000
         }, {
-          to: new Point(425, 250),
-          type: MovementType.STRAIGHT,
-          duration: 1000
-        }, {
-          to: new Point(525, 150),
+          to: new Point(625, 150),
           atStart: MovementAction.PEN_DOWN,
           atEnd: MovementAction.PEN_UP,
           type: MovementType.STRAIGHT,
           duration: 1000
         }, {
-          to: this.getButtonCenter("gearButton"),
-          atEnd: MovementAction.PEN_TAP,
-          type: MovementType.STRAIGHT,
-          duration: 1500
-        }, {
-          to: new Point(20, 250),
+          to: new Point(120, 250),
           type: MovementType.STRAIGHT,
           duration: 1000
         }, {
-          to: new Point(650, 300),
+          to: new Point(750, 300),
           atStart: MovementAction.PEN_DOWN,
           atEnd: MovementAction.PEN_UP,
           type: MovementType.STRAIGHT,
           duration: 1500
         }, {
-          to: new Point(425, 200),
+          to: new Point(525, 200),
           type: MovementType.STRAIGHT,
           duration: 1000
         }, {
-          to: new Point(200, 400),
+          to: new Point(300, 400),
           atStart: MovementAction.PEN_DOWN,
           atEnd: MovementAction.PEN_UP,
           type: MovementType.STRAIGHT,
