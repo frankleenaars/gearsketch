@@ -148,7 +148,7 @@
         if (parent.location.hash.length > 1) {
           try {
             hash = parent.location.hash.substr(1);
-            boardJSON = Util.sendGetRequest("boards/" + hash + ".txt");
+            boardJSON = Util.sendGetRequest("download_board.php?hash=" + hash);
             return Board.fromObject(JSON.parse(boardJSON));
           } catch (_error) {
             error = _error;

@@ -118,7 +118,7 @@ class GearSketch
       if parent.location.hash.length > 1
         try
           hash = parent.location.hash.substr(1)
-          boardJSON = Util.sendGetRequest("boards/#{hash}.txt")
+          boardJSON = Util.sendGetRequest("download_board.php?hash=#{hash}")
           Board.fromObject(JSON.parse(boardJSON))
         catch error
           @displayMessage("Error: could not load board", "red", 2000)
